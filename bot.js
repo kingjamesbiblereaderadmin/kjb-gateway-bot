@@ -1,0 +1,462 @@
+import { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+
+const BIBLE_API = "https://kingjamesbiblereader.com/api/functions/bibleApi";
+const KJB_LOGO = "https://cdn.discordapp.com/avatars/1529303667348606996/0dd9efc7dc75c3bfe0eda43d99d6ed4e.png?size=256";
+
+const OT_BOOKS = ["Genesis","Exodus","Leviticus","Numbers","Deuteronomy","Joshua","Judges","Ruth","1 Samuel","2 Samuel","1 Kings","2 Kings","1 Chronicles","2 Chronicles","Ezra","Nehemiah","Esther","Job","Psalms","Proverbs","Ecclesiastes","Song of Solomon","Isaiah","Jeremiah","Lamentations","Ezekiel","Daniel","Hosea","Joel","Amos","Obadiah","Jonah","Micah","Nahum","Habakkuk","Zephaniah","Haggai","Zechariah","Malachi"];
+const NT_BOOKS = ["Matthew","Mark","Luke","John","Acts","Romans","1 Corinthians","2 Corinthians","Galatians","Ephesians","Philippians","Colossians","1 Thessalonians","2 Thessalonians","1 Timothy","2 Timothy","Titus","Philemon","Hebrews","James","1 Peter","2 Peter","1 John","2 John","3 John","Jude","Revelation"];
+const ALL_BOOKS = [...OT_BOOKS, ...NT_BOOKS];
+
+const KJV_BOOKS = { "Genesis":50,"Exodus":40,"Leviticus":27,"Numbers":36,"Deuteronomy":34,"Joshua":24,"Judges":21,"Ruth":4,"1 Samuel":31,"2 Samuel":24,"1 Kings":22,"2 Kings":25,"1 Chronicles":29,"2 Chronicles":36,"Ezra":10,"Nehemiah":13,"Esther":10,"Job":42,"Psalms":150,"Proverbs":31,"Ecclesiastes":12,"Song of Solomon":8,"Isaiah":66,"Jeremiah":52,"Lamentations":5,"Ezekiel":48,"Daniel":12,"Hosea":14,"Joel":3,"Amos":9,"Obadiah":1,"Jonah":4,"Micah":7,"Nahum":3,"Habakkuk":3,"Zephaniah":3,"Haggai":2,"Zechariah":14,"Malachi":4,"Matthew":28,"Mark":16,"Luke":24,"John":21,"Acts":28,"Romans":16,"1 Corinthians":16,"2 Corinthians":13,"Galatians":6,"Ephesians":6,"Philippians":4,"Colossians":4,"1 Thessalonians":5,"2 Thessalonians":3,"1 Timothy":6,"2 Timothy":4,"Titus":3,"Philemon":1,"Hebrews":13,"James":5,"1 Peter":5,"2 Peter":3,"1 John":5,"2 John":1,"3 John":1,"Jude":1,"Revelation":22 };
+const BOOK_ORDER = Object.keys(KJV_BOOKS);
+
+const KJV_FULL_TITLES = { "Genesis":"The First Book of Moses, called Genesis","Exodus":"The Second Book of Moses, called Exodus","Leviticus":"The Third Book of Moses, called Leviticus","Numbers":"The Fourth Book of Moses, called Numbers","Deuteronomy":"The Fifth Book of Moses, called Deuteronomy","Joshua":"The Book of Joshua","Judges":"The Book of Judges","Ruth":"The Book of Ruth","1 Samuel":"The First Book of Samuel, Otherwise called, The First Book Of The Kings","2 Samuel":"The Second Book of Samuel, Otherwise called, The Second Book Of The Kings","1 Kings":"The First Book Of The Kings, Commonly called, The Third Book Of The Kings","2 Kings":"The Second Book Of The Kings, Commonly called, The Fourth Book Of The Kings","1 Chronicles":"The First Book of the Chronicles","2 Chronicles":"The Second Book of the Chronicles","Ezra":"Ezra","Nehemiah":"The Book of Nehemiah","Esther":"The Book of Esther","Job":"The Book of Job","Psalms":"The Book of Psalms","Proverbs":"The Proverbs","Ecclesiastes":"Ecclesiastes; or, the Preacher","Song of Solomon":"The Song of Solomon","Isaiah":"The Book of the Prophet Isaiah","Jeremiah":"The Book of the Prophet Jeremiah","Lamentations":"The Lamentations of Jeremiah","Ezekiel":"The Book of the Prophet Ezekiel","Daniel":"The Book of Daniel","Hosea":"Hosea","Joel":"Joel","Amos":"Amos","Obadiah":"Obadiah","Jonah":"Jonah","Micah":"Micah","Nahum":"Nahum","Habakkuk":"Habakkuk","Zephaniah":"Zephaniah","Haggai":"Haggai","Zechariah":"Zechariah","Malachi":"Malachi","Matthew":"The Gospel According to Saint Matthew","Mark":"The Gospel According to Saint Mark","Luke":"The Gospel According to Saint Luke","John":"The Gospel According to Saint John","Acts":"The Acts of the Apostles","Romans":"The Epistle of Paul the Apostle to the Romans","1 Corinthians":"The First Epistle of Paul the Apostle to the Corinthians","2 Corinthians":"The Second Epistle of Paul the Apostle to the Corinthians","Galatians":"The Epistle of Paul the Apostle to the Galatians","Ephesians":"The Epistle of Paul the Apostle to the Ephesians","Philippians":"The Epistle of Paul the Apostle to the Philippians","Colossians":"The Epistle of Paul the Apostle to the Colossians","1 Thessalonians":"The First Epistle of Paul the Apostle to the Thessalonians","2 Thessalonians":"The Second Epistle of Paul the Apostle to the Thessalonians","1 Timothy":"The First Epistle of Paul the Apostle to Timothy","2 Timothy":"The Second Epistle of Paul the Apostle to Timothy","Titus":"The Epistle of Paul to Titus","Philemon":"The Epistle of Paul to Philemon","Hebrews":"The Epistle of Paul the Apostle to the Hebrews","James":"The General Epistle of James","1 Peter":"The First Epistle General of Peter","2 Peter":"The Second Epistle General of Peter","1 John":"The First Epistle General of John","2 John":"The Second Epistle of John","3 John":"The Third Epistle of John","Jude":"The General Epistle of Jude","Revelation":"The Revelation of Saint John the Divine" };
+
+const ALIASES = { "gen":"Genesis","ge":"Genesis","gn":"Genesis","exo":"Exodus","ex":"Exodus","lev":"Leviticus","le":"Leviticus","num":"Numbers","nu":"Numbers","deu":"Deuteronomy","de":"Deuteronomy","dt":"Deuteronomy","jos":"Joshua","josh":"Joshua","jdg":"Judges","judg":"Judges","rut":"Ruth","ru":"Ruth","1sa":"1 Samuel","1sam":"1 Samuel","2sa":"2 Samuel","2sam":"2 Samuel","1ki":"1 Kings","1kgs":"1 Kings","2ki":"2 Kings","2kgs":"2 Kings","1ch":"1 Chronicles","1chr":"1 Chronicles","2ch":"2 Chronicles","2chr":"2 Chronicles","ezr":"Ezra","neh":"Nehemiah","ne":"Nehemiah","est":"Esther","es":"Esther","job":"Job","jb":"Job","psa":"Psalms","ps":"Psalms","psalm":"Psalms","pss":"Psalms","pro":"Proverbs","pr":"Proverbs","prv":"Proverbs","ecc":"Ecclesiastes","ec":"Ecclesiastes","son":"Song of Solomon","sos":"Song of Solomon","sng":"Song of Solomon","song":"Song of Solomon","isa":"Isaiah","is":"Isaiah","jer":"Jeremiah","je":"Jeremiah","lam":"Lamentations","la":"Lamentations","eze":"Ezekiel","ezk":"Ezekiel","dan":"Daniel","da":"Daniel","hos":"Hosea","ho":"Hosea","joe":"Joel","jl":"Joel","amo":"Amos","am":"Amos","oba":"Obadiah","ob":"Obadiah","jon":"Jonah","mic":"Micah","mi":"Micah","nah":"Nahum","na":"Nahum","hab":"Habakkuk","hb":"Habakkuk","zep":"Zephaniah","hag":"Haggai","hg":"Haggai","zec":"Zechariah","zch":"Zechariah","mal":"Malachi","ml":"Malachi","mat":"Matthew","mt":"Matthew","matt":"Matthew","mar":"Mark","mk":"Mark","mr":"Mark","luk":"Luke","lk":"Luke","joh":"John","jn":"John","jhn":"John","act":"Acts","ac":"Acts","rom":"Romans","ro":"Romans","rm":"Romans","1co":"1 Corinthians","1cor":"1 Corinthians","2co":"2 Corinthians","2cor":"2 Corinthians","gal":"Galatians","ga":"Galatians","eph":"Ephesians","ep":"Ephesians","php":"Philippians","phi":"Philippians","phil":"Philippians","col":"Colossians","1th":"1 Thessalonians","1thes":"1 Thessalonians","2th":"2 Thessalonians","2thes":"2 Thessalonians","1ti":"1 Timothy","1tim":"1 Timothy","2ti":"2 Timothy","2tim":"2 Timothy","tit":"Titus","ti":"Titus","phm":"Philemon","pm":"Philemon","heb":"Hebrews","he":"Hebrews","jam":"James","jas":"James","1pe":"1 Peter","1pet":"1 Peter","2pe":"2 Peter","2pet":"2 Peter","1jo":"1 John","1jn":"1 John","1jhn":"1 John","2jo":"2 John","2jn":"2 John","3jo":"3 John","3jn":"3 John","jud":"Jude","jude":"Jude","rev":"Revelation","re":"Revelation","rv":"Revelation","rev":"Revelation" };
+
+function resolveBook(input) {
+  const norm = input.trim();
+  for (const full of ALL_BOOKS) { if (full.toLowerCase() === norm.toLowerCase()) return full; }
+  const key = norm.toLowerCase().replace(/\s+/g, "");
+  if (ALIASES[key]) return ALIASES[key];
+  return null;
+}
+
+// Parse a Bible reference from text
+function parseRef(text) {
+  // Match: "John 3:16", "1 Corinthians 15:1-4", "Genesis 1", "Ps 23"
+  const m = text.trim().match(/^((?:[123]\s+)?[A-Za-z][A-Za-z\s]*?)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$/);
+  if (!m) return null;
+  const book = resolveBook(m[1]);
+  if (!book) return null;
+  const chapter = parseInt(m[2]);
+  const verseStart = m[3] ? parseInt(m[3]) : null;
+  const verseEnd = m[4] ? parseInt(m[4]) : null;
+  if (verseStart !== null && KJV_BOOKS[book] && (chapter < 1 || chapter > KJV_BOOKS[book])) return null;
+  return { book, chapter, verseStart, verseEnd };
+}
+
+function fixAE(text) { return text.replace(/\bAEnon\b/g, "Ænon").replace(/\bAEneas\b/g, "Æneas"); }
+function formatKJV(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "*$1*"); }
+function stripMd(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "$1").replace(/\*/g, "").replace(/¶/g, "").trim(); }
+
+function getPrevCh(book, ch) { if (ch > 1) return { book, chapter: ch - 1 }; const idx = BOOK_ORDER.indexOf(book); if (idx <= 0) return null; const p = BOOK_ORDER[idx - 1]; return { book: p, chapter: KJV_BOOKS[p] }; }
+function getNextCh(book, ch) { if (ch < KJV_BOOKS[book]) return { book, chapter: ch + 1 }; const idx = BOOK_ORDER.indexOf(book); if (idx >= BOOK_ORDER.length - 1) return null; const n = BOOK_ORDER[idx + 1]; return { book: n, chapter: 1 }; }
+
+async function callBibleApi(payload) {
+  const r = await fetch(BIBLE_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  return await r.json();
+}
+
+function buildVerseEmbed(verses) {
+  const first = verses[0], last = verses[verses.length - 1];
+  const title = verses.length > 1 ? `${first.book} ${first.chapter}:${first.verse}–${last.verse}` : `${first.book} ${first.chapter}:${first.verse}`;
+  let desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
+  desc += verses.length === 1 ? `"${formatKJV(verses[0].text)}"` : verses.map(v => `**[${v.verse}]** ${formatKJV(v.text)}`).join("\n\n");
+  if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
+
+  const embed = new EmbedBuilder()
+    .setTitle(`📖 ${title}`)
+    .setDescription(desc)
+    .setColor(0xC8922E)
+    .setThumbnail(KJB_LOGO)
+    .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+
+  const refStr = verses.length > 1 ? `${first.book} ${first.chapter}:${first.verse}-${last.verse}` : `${first.book} ${first.chapter}:${first.verse}`;
+
+  const rows = [];
+  rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`copyref|${refStr}`).setStyle(ButtonStyle.Secondary).setLabel("📋 Copy"),
+    new ButtonBuilder().setCustomId(`dv|${first.book}||${first.chapter}||${first.verse}`).setStyle(ButtonStyle.Secondary).setLabel("📖 Read Chapter"),
+    new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
+  ));
+
+  return { embeds: [embed], components: rows };
+}
+
+function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page = 0) {
+  const pageSize = 3800;
+  const lines = [];
+  let lastH = "";
+  for (const v of verses) {
+    if (v.heading && v.heading !== lastH) { lines.push(`\n— **${v.heading}** —`); lastH = v.heading; }
+    if (v.verse === 1 && v.superscription) lines.push(`¶ ${formatKJV(v.superscription)}`);
+    lines.push(`[${v.verse}] ${formatKJV(v.text)}`);
+  }
+  if (colophon) lines.push(`\n¶ ${formatKJV(colophon)}`);
+
+  const pages = [];
+  let current = "";
+  for (const line of lines) {
+    const add = (current ? "\n" : "") + line;
+    if (current.length + add.length > pageSize) { pages.push(current); current = line; }
+    else current += add;
+  }
+  if (current) pages.push(current);
+  if (!pages.length) pages.push("*(No content)*");
+
+  const totalPages = pages.length;
+  const prev = getPrevCh(book, chapter);
+  const next = getNextCh(book, chapter);
+  const isOT = OT_BOOKS.includes(book);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`📖 ${bookFullName || KJV_FULL_TITLES[book] || book} — Chapter ${chapter}`)
+    .setDescription(pages[page])
+    .setColor(0xC8922E)
+    .setThumbnail(KJB_LOGO)
+    .setFooter({ text: `KJB Reader • Chapter ${chapter} of ${KJV_BOOKS[book]} • ${KJV_BOOKS[book] - chapter} chapters left • Page ${page + 1} of ${totalPages} • kingjamesbiblereader.com` });
+
+  const rows = [];
+  if (totalPages > 1) {
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`chpg|${book}|${chapter}|${page - 1}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Page").setDisabled(page === 0),
+      new ButtonBuilder().setCustomId(`nopg_${page}`).setStyle(ButtonStyle.Secondary).setLabel(`${page + 1} / ${totalPages}`).setDisabled(true),
+      new ButtonBuilder().setCustomId(`chpg|${book}|${chapter}|${page + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Page ▶").setDisabled(page >= totalPages - 1),
+    ));
+  }
+
+  const navBtns = [];
+  if (prev) {
+    navBtns.push(new ButtonBuilder().setCustomId(`prevch|${prev.book}||${prev.chapter}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev Ch"));
+  } else {
+    navBtns.push(new ButtonBuilder().setCustomId(`bibletoc|0|nav`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"));
+  }
+  if (next) {
+    navBtns.push(new ButtonBuilder().setCustomId(`nextch|${next.book}||${next.chapter}`).setStyle(ButtonStyle.Secondary).setLabel("Next Ch ▶"));
+  } else {
+    navBtns.push(new ButtonBuilder().setCustomId(`toc_ch|Genesis||1`).setStyle(ButtonStyle.Primary).setLabel("📖 Bible Start"));
+  }
+  rows.push(new ActionRowBuilder().addComponents(...navBtns));
+
+  rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`chcopy|${book}||${chapter}`).setStyle(ButtonStyle.Secondary).setLabel("📋 Copy"),
+    new ButtonBuilder().setCustomId(`toc|${book}||0`).setStyle(ButtonStyle.Secondary).setLabel("📖 Chapters"),
+    new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
+  ));
+
+  return { embeds: [embed], components: rows };
+}
+
+// Discord client
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages,
+  ],
+});
+
+client.once("ready", () => {
+  console.log(`✅ KJB Gateway Bot online as ${client.user.tag}`);
+  console.log(`   Listening for Bible references in ${client.guilds.cache.size} servers`);
+  client.user.setActivity("KJB Reader | @me with a verse", { type: 3 }); // Watching
+});
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+
+  const content = message.content.trim();
+  const isMention = message.mentions.has(client.user);
+  const cleanContent = content.replace(/<@!?\d+>/g, "").trim();
+
+  // Help command
+  if (isMention && /^(help|commands)\s*$/i.test(cleanContent)) {
+    const helpEmbed = new EmbedBuilder()
+      .setTitle("📖 KJB Reader — Help")
+      .setDescription([
+        "**How to use:**",
+        "• `@KJB Reader John 3:16` — Look up a verse",
+        "• `@KJB Reader Romans 3:25` — Another verse",
+        "• `@KJB Reader 1 Corinthians 15:1-4` — Verse range",
+        "• `@KJB Reader Psalm 23` — Read a full chapter",
+        "• `@KJB Reader Genesis` — Browse chapter list",
+        "",
+        "Or just type a reference in any channel:",
+        "• `John 3:16` — Instant verse lookup",
+        "• `Romans 3:25` — Works without mentioning",
+        "",
+        "**Commands:**",
+        "• `@KJB Reader daily` — Today's verse",
+        "• `@KJB Reader random` — Random verse",
+        "• `@KJB Reader gospel` — How to be saved",
+        "• `@KJB Reader help` — This message",
+        "",
+        "**Slash commands still work:**",
+        "`/read`, `/search`, `/random`, `/daily`, `/gospel`, `/toc`",
+        "",
+        "**Support:**",
+        "Join our Discord: **[kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)**",
+        "📧 Email: **Kingjamesbiblereader@outlook.sg**",
+        "",
+        "Bible App powered by **[kingjamesbiblereader.com](https://kingjamesbiblereader.com)**",
+      ].join("\n"))
+      .setColor(0xC8922E)
+      .setThumbnail(KJB_LOGO)
+      .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+    await message.reply({ embeds: [helpEmbed] });
+    return;
+  }
+
+  // Daily verse
+  if (isMention && /^daily\s*$/i.test(cleanContent)) {
+    try {
+      const now = new Date();
+      const data = await callBibleApi({ action: "daily_verse", clientDate: `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}` });
+      const v = data?.verse || data;
+      if (v?.text) {
+        const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
+        let desc = `**${ref}**\n\n`;
+        if (v.verse === 1 && v.superscription) desc += `¶ ${formatKJV(v.superscription)}\n\n`;
+        desc += `"${formatKJV(v.text)}"`;
+        const embed = new EmbedBuilder().setTitle(`📖 Daily Verse — ${now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}`).setDescription(desc).setColor(0xC8922E).setThumbnail(KJB_LOGO).setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+        await message.reply({ embeds: [embed] });
+      }
+    } catch (e) { console.error("daily:", e.message); }
+    return;
+  }
+
+  // Random verse
+  if (isMention && /^random\s*$/i.test(cleanContent)) {
+    try {
+      const data = await callBibleApi({ action: "random_verse" });
+      if (data?.verse) {
+        await message.reply(buildVerseEmbed([data.verse]));
+      }
+    } catch (e) { console.error("random:", e.message); }
+    return;
+  }
+
+  // Gospel
+  if (isMention && /^gospel\s*$/i.test(cleanContent)) {
+    const embed = new EmbedBuilder()
+      .setTitle("✝️ HOW TO BE SAVED")
+      .setDescription("The Gospel is the glad tidings of the Lord Jesus Christ:\n\n**Trust he is God, died, shed his blood, buried and rose again on the third day for our sins according to the scriptures.**\n\n📖 Read the full gospel:\nhttps://kingjamesbiblereader.com/gospel")
+      .setColor(0xC8922E).setThumbnail(KJB_LOGO)
+      .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+    await message.reply({ embeds: [embed] });
+    return;
+  }
+
+  // Try to parse as Bible reference
+  let refText = isMention ? cleanContent : content;
+  const parsed = parseRef(refText);
+
+  // Also try matching a reference anywhere in the message (non-mention only)
+  let inlineRef = null;
+  if (!isMention && !parsed) {
+    const inlineMatch = content.match(/\b((?:[123]\s)?[A-Za-z]{2,}(?:\s[A-Za-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?\b/);
+    if (inlineMatch) {
+      const book = resolveBook(inlineMatch[1]);
+      if (book) {
+        const chapter = parseInt(inlineMatch[2]);
+        if (KJV_BOOKS[book] && chapter >= 1 && chapter <= KJV_BOOKS[book]) {
+          inlineRef = { book, chapter, verseStart: parseInt(inlineMatch[3]), verseEnd: inlineMatch[4] ? parseInt(inlineMatch[4]) : null };
+        }
+      }
+    }
+  }
+
+  const ref = parsed || inlineRef;
+  if (!ref) return;
+
+  // Ignore if message is too long (probably not a Bible reference query)
+  if (!isMention && content.length > 100) return;
+
+  try {
+    // Verse lookup
+    if (ref.verseStart !== null) {
+      const refs = [];
+      if (ref.verseEnd) {
+        for (let v = ref.verseStart; v <= ref.verseEnd; v++) refs.push(`${ref.book} ${ref.chapter}:${v}`);
+      } else {
+        refs.push(`${ref.book} ${ref.chapter}:${ref.verseStart}`);
+      }
+      const results = await Promise.all(refs.map(r => callBibleApi({ action: "resolve_refs", refs: [r] }).then(d => d?.verses?.[0]).catch(() => null)));
+      const verses = results.filter(Boolean);
+      if (verses.length) {
+        await message.reply(buildVerseEmbed(verses));
+      } else {
+        await message.reply({ content: `❌ "${refText}" not found in the KJB.`, allowedMentions: { repliedUser: false } });
+      }
+    }
+    // Chapter lookup
+    else {
+      const data = await callBibleApi({ action: "getChapter", book: ref.book, chapter: ref.chapter });
+      if (data?.verses?.length) {
+        await message.reply(buildChapterEmbed(ref.book, ref.chapter, data.verses, data.colophon, data.bookFullName));
+      } else {
+        await message.reply({ content: `❌ ${ref.book} ${ref.chapter} not found.`, allowedMentions: { repliedUser: false } });
+      }
+    }
+  } catch (e) {
+    console.error("ref lookup:", e.message);
+    if (isMention) await message.reply({ content: "❌ Something went wrong. Try again!", allowedMentions: { repliedUser: false } });
+  }
+});
+
+// Handle button interactions (forward to V2 endpoint)
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const customId = interaction.customId;
+
+  // Copy buttons
+  if (customId.startsWith("copyref|")) {
+    const ref = customId.slice("copyref|".length);
+    try {
+      const chapterOnly = !ref.includes(":") && ref.match(/^(.+?)\s+(\d+)$/);
+      let copyText = "";
+      if (chapterOnly) {
+        const d = await callBibleApi({ action: "getChapter", book: chapterOnly[1].trim(), chapter: parseInt(chapterOnly[2]) });
+        const verses = d?.verses || [];
+        if (!verses.length) return interaction.reply({ content: "❌ Not found.", flags: 64 });
+        copyText = `${chapterOnly[1].trim()} ${chapterOnly[2]} (KJB)\n` + verses.map(v => `[${v.verse}] ${stripMd(v.text)}`).join("\n");
+        if (d.colophon) copyText += `\n¶ ${stripMd(d.colophon)}`;
+      } else {
+        const d = await callBibleApi({ action: "resolve_refs", refs: [ref] });
+        const verses = d?.verses || [];
+        if (!verses.length || verses[0]?.text == null) return interaction.reply({ content: "❌ Verse not found.", flags: 64 });
+        const first = verses[0], last = verses[verses.length - 1];
+        const refLabel = verses.length > 1 ? `${first.book} ${first.chapter}:${first.verse}-${last.verse}` : `${first.book} ${first.chapter}:${first.verse}`;
+        copyText = `${refLabel} (KJB) — ` + verses.map(v => stripMd(v.text)).join(" ");
+      }
+      const chunks = [];
+      const lines = copyText.split("\n");
+      let cur = "";
+      for (const line of lines) { const add = (cur ? "\n" : "") + line; if (cur.length + add.length > 1800) { chunks.push(cur); cur = line; } else cur += add; }
+      if (cur) chunks.push(cur);
+      if (chunks.length === 1) return interaction.reply({ content: "```\n" + chunks[0] + "\n```", flags: 64 });
+      for (let i = 0; i < chunks.length; i++) {
+        if (i === 0) await interaction.reply({ content: "```\n" + chunks[i] + "\n```", flags: 64 });
+        else await interaction.followUp({ content: "```\n" + chunks[i] + "\n```", flags: 64 });
+      }
+    } catch (e) { console.error("copy:", e.message); interaction.reply({ content: "❌ Could not fetch.", flags: 64 }).catch(() => {}); }
+    return;
+  }
+
+  if (customId.startsWith("chcopy|")) {
+    const rest = customId.slice("chcopy|".length);
+    const sep = rest.indexOf("||");
+    if (sep === -1) return interaction.reply({ content: "❌ Invalid.", flags: 64 });
+    const book = rest.slice(0, sep), chapter = parseInt(rest.slice(sep + 2));
+    try {
+      const d = await callBibleApi({ action: "getChapter", book, chapter });
+      const verses = d?.verses || [];
+      if (!verses.length) return interaction.reply({ content: "❌ Not found.", flags: 64 });
+      let copyText = `${book} ${chapter} (KJB)\n` + verses.map(v => `[${v.verse}] ${stripMd(v.text)}`).join("\n");
+      if (d.colophon) copyText += `\n¶ ${stripMd(d.colophon)}`;
+      const chunks = [];
+      const lines = copyText.split("\n");
+      let cur = "";
+      for (const line of lines) { const add = (cur ? "\n" : "") + line; if (cur.length + add.length > 1800) { chunks.push(cur); cur = line; } else cur += add; }
+      if (cur) chunks.push(cur);
+      if (chunks.length === 1) return interaction.reply({ content: "```\n" + chunks[0] + "\n```", flags: 64 });
+      for (let i = 0; i < chunks.length; i++) {
+        if (i === 0) await interaction.reply({ content: "```\n" + chunks[i] + "\n```", flags: 64 });
+        else await interaction.followUp({ content: "```\n" + chunks[i] + "\n```", flags: 64 });
+      }
+    } catch (e) { console.error("chcopy:", e.message); interaction.reply({ content: "❌ Could not fetch.", flags: 64 }).catch(() => {}); }
+    return;
+  }
+
+  // Chapter navigation buttons
+  if (customId.startsWith("chpg|")) {
+    const parts = customId.slice("chpg|".length).split("|");
+    try {
+      const d = await callBibleApi({ action: "getChapter", book: parts[0], chapter: parseInt(parts[1]) });
+      if (d?.verses?.length) {
+        await interaction.update(buildChapterEmbed(parts[0], parseInt(parts[1]), d.verses, d.colophon, d.bookFullName, parseInt(parts[2]) || 0));
+      }
+    } catch (e) { console.error("chpg:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
+    return;
+  }
+
+  if (customId.startsWith("prevch|") || customId.startsWith("nextch|")) {
+    const parts = customId.slice(customId.indexOf("|") + 1).split("||");
+    try {
+      const d = await callBibleApi({ action: "getChapter", book: parts[0], chapter: parseInt(parts[1]) });
+      if (d?.verses?.length) {
+        await interaction.update(buildChapterEmbed(parts[0], parseInt(parts[1]), d.verses, d.colophon, d.bookFullName, 0));
+      }
+    } catch (e) { console.error("nav:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
+    return;
+  }
+
+  if (customId.startsWith("toc_ch|")) {
+    const parts = customId.slice("toc_ch|".length).split("||");
+    try {
+      const d = await callBibleApi({ action: "getChapter", book: parts[0], chapter: parseInt(parts[1]) });
+      if (d?.verses?.length) {
+        await interaction.update(buildChapterEmbed(parts[0], parseInt(parts[1]), d.verses, d.colophon, d.bookFullName, 0));
+      }
+    } catch (e) { console.error("toc_ch:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
+    return;
+  }
+
+  if (customId.startsWith("dv|")) {
+    const parts = customId.slice("dv|".length).split("||");
+    try {
+      const d = await callBibleApi({ action: "getChapter", book: parts[0], chapter: parseInt(parts[1]) });
+      if (d?.verses?.length) {
+        await interaction.update(buildChapterEmbed(parts[0], parseInt(parts[1]), d.verses, d.colophon, d.bookFullName, 0));
+      }
+    } catch (e) { console.error("dv:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
+    return;
+  }
+
+  if (customId.startsWith("toc|")) {
+    const parts = customId.slice("toc|".length).split("||");
+    const book = parts[0];
+    const totalChapters = KJV_BOOKS[book] || 0;
+    if (totalChapters === 0) return;
+    const pageSize = 20;
+    const pageIdx = parseInt(parts[1]) || 0;
+    const start = pageIdx * pageSize;
+    const end = Math.min(start + pageSize, totalChapters);
+    const btns = [];
+    for (let ch = start + 1; ch <= end; ch++) btns.push(new ButtonBuilder().setCustomId(`toc_ch|${book}||${ch}`).setStyle(ButtonStyle.Secondary).setLabel(`${ch}`));
+    const rows = [];
+    for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(...btns.slice(i, i + 5)));
+    const totalPages = Math.ceil(totalChapters / pageSize);
+    if (totalPages > 1) {
+      rows.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`toc|${book}||${pageIdx - 1}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev").setDisabled(pageIdx === 0),
+        new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 Bible TOC"),
+        new ButtonBuilder().setCustomId(`toc|${book}||${pageIdx + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next ▶").setDisabled(pageIdx >= totalPages - 1),
+      ));
+    }
+    const embed = new EmbedBuilder()
+      .setTitle(`📖 ${KJV_FULL_TITLES[book] || book}`)
+      .setDescription(`Select a chapter to read:\n\n${totalPages > 1 ? `Chapters ${start + 1}–${end} of ${totalChapters}` : `${totalChapters} chapter${totalChapters !== 1 ? "s" : ""}`}`)
+      .setColor(0xC8922E).setThumbnail(KJB_LOGO)
+      .setFooter({ text: `KJB Reader • ${totalPages > 1 ? `Page ${pageIdx + 1} of ${totalPages} • ` : ""}kingjamesbiblereader.com` });
+    await interaction.update({ embeds: [embed], components: rows });
+    return;
+  }
+
+  if (customId.startsWith("bibletoc|")) {
+    const page = parseInt(customId.split("|")[1]) || 0;
+    const pageSize = 15;
+    const start = page * pageSize;
+    const books = ALL_BOOKS.slice(start, start + pageSize);
+    const totalPages = Math.ceil(ALL_BOOKS.length / pageSize);
+    const btns = books.map(b => new ButtonBuilder().setCustomId(`toc|${b}||0`).setStyle(ButtonStyle.Secondary).setLabel(b));
+    const rows = [];
+    for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(...btns.slice(i, i + 5)));
+    const navBtns = [];
+    if (page > 0) navBtns.push(new ButtonBuilder().setCustomId(`bibletoc|${page - 1}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev Page"));
+    navBtns.push(new ButtonBuilder().setCustomId(`nop_btnav_${page}`).setStyle(ButtonStyle.Secondary).setLabel(`Page ${page + 1} / ${totalPages}`).setDisabled(true));
+    if (page < totalPages - 1) navBtns.push(new ButtonBuilder().setCustomId(`bibletoc|${page + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next Page ▶"));
+    rows.push(new ActionRowBuilder().addComponents(...navBtns));
+    const embed = new EmbedBuilder()
+      .setTitle("📖 King James Bible — Table of Contents")
+      .setDescription(`**All 66 Books**\n\nClick any book to see its chapters.\nPage ${page + 1} of ${totalPages}`)
+      .setColor(0xC8922E).setThumbnail(KJB_LOGO)
+      .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+    await interaction.update({ embeds: [embed], components: rows });
+    return;
+  }
+});
+
+client.login(process.env.DISCORD_BOT_TOKEN);

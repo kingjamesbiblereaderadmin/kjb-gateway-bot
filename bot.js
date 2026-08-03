@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, PermissionsBitField, ModalBuilder, TextInputBuilder } from "discord.js";
+import { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, PermissionsBitField, ModalBuilder, TextInputBuilder } from "discord.js";
 import cron from "node-cron";
 import fs from "fs";
 import path from "path";
@@ -599,7 +599,11 @@ function buildGospelEmbed(page = 0) {
 
 // ============ CLIENT ============
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent], presence: { status: "online" } });
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent],
+  partials: [Partials.Channel, Partials.Message],
+  presence: { status: "online" },
+});
 
 const GUILD_CHANNEL_MAP = new Map();
 

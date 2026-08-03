@@ -608,7 +608,7 @@ function buildWelcomeEmbed() {
       "",
       "**Support**",
       "Join our Discord support server: **[kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)**",
-      "📧 Email: **Kingjamesbiblereader@outlook.sg**",
+      "📧 Email: **[Kingjamesbiblereader@outlook.sg](mailto:Kingjamesbiblereader@outlook.sg)**",
     ].join("\n"))
     .setColor(0xC8922E)
     .setThumbnail(KJB_LOGO)
@@ -840,7 +840,7 @@ client.on("messageCreate", async (message) => {
         "",
         "**Support:**",
         "Join our Discord: **[kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)**",
-        "📧 Email: **Kingjamesbiblereader@outlook.sg**",
+        "📧 Email: **[Kingjamesbiblereader@outlook.sg](mailto:Kingjamesbiblereader@outlook.sg)**",
         "",
         "Bible App powered by **[kingjamesbiblereader.com](https://kingjamesbiblereader.com)**",
       ].join("\n"))

@@ -75,35 +75,31 @@ function buildVerseEmbed(verses) {
   // Check if verses span multiple books or chapters
   const sameBook = verses.every(v => v.book === first.book);
   const sameChapter = sameBook && verses.every(v => v.chapter === first.chapter);
+  const isMultiRef = !sameChapter; // different books or different chapters
   
-  let title, desc, shortRef;
+  let title, desc;
   
   if (sameBook && sameChapter && verses.length > 1) {
-    // Same book, same chapter, multiple verses (e.g., John 3:16-18)
+    // Dash range in same chapter (e.g., John 3:16-18) — show verses TOGETHER
     title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
     desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
     desc += verses.map(v => `**[${v.verse}]** ${formatKJV(v.text)}`).join("\n\n");
-    shortRef = `${first.book} ${first.chapter}:${first.verse}-${last.verse}`;
-  } else if (sameBook && verses.length > 1) {
-    // Same book, different chapters (e.g., John 3:16, John 4:1)
-    title = fullTitle;
-    desc = verses.map(v => `**${v.chapter}:${v.verse}** ${formatKJV(v.text)}`).join("\n\n");
-    shortRef = `${first.book} ${first.chapter}:${first.verse}`;
   } else if (verses.length === 1) {
     // Single verse
     title = `${fullTitle} — ${first.chapter}:${first.verse}`;
     desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
     desc += `"${formatKJV(verses[0].text)}"`;
-    shortRef = `${first.book} ${first.chapter}:${first.verse}`;
+  } else if (sameBook && !sameChapter) {
+    // Same book, different chapters
+    title = fullTitle;
+    desc = verses.map(v => `**${v.chapter}:${v.verse}**\n"${formatKJV(v.text)}"`).join("\n\n");
   } else {
     // Multiple books (e.g., 1 Cor 15:1-4, Romans 3:25, Eph 1:13)
     title = "Multiple Verses";
     desc = verses.map(v => {
       const vTitle = KJV_FULL_TITLES[v.book] || v.book;
-      const ref = `${vTitle} — ${v.chapter}:${v.verse}`;
-      return `**${ref}**\n"${formatKJV(v.text)}"`;
+      return `**${vTitle} — ${v.chapter}:${v.verse}**\n"${formatKJV(v.text)}"`;
     }).join("\n\n");
-    shortRef = `${first.book} ${first.chapter}:${first.verse}`;
   }
   
   if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
@@ -117,19 +113,46 @@ function buildVerseEmbed(verses) {
 
   const rows = [];
 
-  // Row 1: Prev Vs / Next Vs (navigate from first verse)
-  const prevVsDis = (first.chapter === 1 && first.verse === 1);
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`prevvs|${first.book}||${first.chapter}||${first.verse}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev Vs").setDisabled(prevVsDis),
-    new ButtonBuilder().setCustomId(`nextvs|${last.book}||${last.chapter}||${last.verse}`).setStyle(ButtonStyle.Secondary).setLabel("Next Vs ▶"),
-  ));
+  if (!isMultiRef) {
+    // Single verse or dash range: keep Prev/Next + Read Chapter + TOC + Copy
+    const shortRef = verses.length > 1 
+      ? `${first.book} ${first.chapter}:${first.verse}-${last.verse}` 
+      : `${first.book} ${first.chapter}:${first.verse}`;
+    
+    // Row 1: Prev Vs / Next Vs
+    const prevVsDis = (first.chapter === 1 && first.verse === 1);
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`prevvs|${first.book}||${first.chapter}||${first.verse}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev Vs").setDisabled(prevVsDis),
+      new ButtonBuilder().setCustomId(`nextvs|${last.book}||${last.chapter}||${last.verse}`).setStyle(ButtonStyle.Secondary).setLabel("Next Vs ▶"),
+    ));
 
-  // Row 2: Read Chapter + TOC + Copy
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`dv|${first.book}||${first.chapter}||${first.verse}`).setStyle(ButtonStyle.Secondary).setLabel("📖 Read Chapter"),
-    new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
-    new ButtonBuilder().setCustomId(`copyref|${shortRef}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel("📋 Copy"),
-  ));
+    // Row 2: Read Chapter + TOC + Copy
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`dv|${first.book}||${first.chapter}||${first.verse}`).setStyle(ButtonStyle.Secondary).setLabel("📖 Read Chapter"),
+      new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
+      new ButtonBuilder().setCustomId(`copyref|${shortRef}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel("📋 Copy"),
+    ));
+  } else {
+    // Multi-ref: NO Prev/Next, individual Copy buttons + TOC
+    // Row 1: TOC + up to 4 Copy buttons (5 buttons max per row)
+    const copyButtons = verses.slice(0, 4).map(v => {
+      const ref = `${v.book} ${v.chapter}:${v.verse}`;
+      return new ButtonBuilder().setCustomId(`copyref|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(`📋 ${ref}`);
+    });
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
+      ...copyButtons
+    ));
+    
+    // If more than 4 verses, add remaining copy buttons in row 2
+    if (verses.length > 4) {
+      const copyButtons2 = verses.slice(4, 9).map(v => {
+        const ref = `${v.book} ${v.chapter}:${v.verse}`;
+        return new ButtonBuilder().setCustomId(`copyref|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(`📋 ${ref}`);
+      });
+      rows.push(new ActionRowBuilder().addComponents(...copyButtons2));
+    }
+  }
 
   return { embeds: [embed], components: rows };
 }

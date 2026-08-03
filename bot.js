@@ -71,9 +71,41 @@ async function callBibleApi(payload) {
 function buildVerseEmbed(verses) {
   const first = verses[0], last = verses[verses.length - 1];
   const fullTitle = KJV_FULL_TITLES[first.book] || first.book;
-  const title = verses.length > 1 ? `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}` : `${fullTitle} — ${first.chapter}:${first.verse}`;
-  let desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
-  desc += verses.length === 1 ? `"${formatKJV(verses[0].text)}"` : verses.map(v => `**[${v.verse}]** ${formatKJV(v.text)}`).join("\n\n");
+  
+  // Check if verses span multiple books or chapters
+  const sameBook = verses.every(v => v.book === first.book);
+  const sameChapter = sameBook && verses.every(v => v.chapter === first.chapter);
+  
+  let title, desc, shortRef;
+  
+  if (sameBook && sameChapter && verses.length > 1) {
+    // Same book, same chapter, multiple verses (e.g., John 3:16-18)
+    title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
+    desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
+    desc += verses.map(v => `**[${v.verse}]** ${formatKJV(v.text)}`).join("\n\n");
+    shortRef = `${first.book} ${first.chapter}:${first.verse}-${last.verse}`;
+  } else if (sameBook && verses.length > 1) {
+    // Same book, different chapters (e.g., John 3:16, John 4:1)
+    title = fullTitle;
+    desc = verses.map(v => `**${v.chapter}:${v.verse}** ${formatKJV(v.text)}`).join("\n\n");
+    shortRef = `${first.book} ${first.chapter}:${first.verse}`;
+  } else if (verses.length === 1) {
+    // Single verse
+    title = `${fullTitle} — ${first.chapter}:${first.verse}`;
+    desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
+    desc += `"${formatKJV(verses[0].text)}"`;
+    shortRef = `${first.book} ${first.chapter}:${first.verse}`;
+  } else {
+    // Multiple books (e.g., 1 Cor 15:1-4, Romans 3:25, Eph 1:13)
+    title = "Multiple Verses";
+    desc = verses.map(v => {
+      const vTitle = KJV_FULL_TITLES[v.book] || v.book;
+      const ref = `${vTitle} — ${v.chapter}:${v.verse}`;
+      return `**${ref}**\n"${formatKJV(v.text)}"`;
+    }).join("\n\n");
+    shortRef = `${first.book} ${first.chapter}:${first.verse}`;
+  }
+  
   if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
 
   const embed = new EmbedBuilder()
@@ -83,14 +115,10 @@ function buildVerseEmbed(verses) {
     .setThumbnail(KJB_LOGO)
     .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
 
-  const shortRef = verses.length > 1 ? `${first.book} ${first.chapter}:${first.verse}-${last.verse}` : `${first.book} ${first.chapter}:${first.verse}`;
   const rows = [];
 
-  // Row 1: Prev Vs / Next Vs
-  const prevCh = getPrevCh(first.book, first.chapter);
-  const nextCh = getNextCh(first.book, first.chapter);
+  // Row 1: Prev Vs / Next Vs (navigate from first verse)
   const prevVsDis = (first.chapter === 1 && first.verse === 1);
-  const nextVsDis = nextCh === null && first.verse === KJV_BOOKS[last.book] && last.verse === 999; // approximate
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`prevvs|${first.book}||${first.chapter}||${first.verse}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev Vs").setDisabled(prevVsDis),
     new ButtonBuilder().setCustomId(`nextvs|${last.book}||${last.chapter}||${last.verse}`).setStyle(ButtonStyle.Secondary).setLabel("Next Vs ▶"),

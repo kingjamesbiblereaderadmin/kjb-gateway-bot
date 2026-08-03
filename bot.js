@@ -253,7 +253,7 @@ function buildVerseEmbed(verses) {
     // Dash range in same chapter (e.g., John 3:16-18) — show verses TOGETHER
     title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
     desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
-    desc += verses.map(v => `**[${v.verse}]** ${formatKJV(v.text)}`).join("\n\n");
+    desc += verses.map(v => `[${v.verse}] ${formatKJV(v.text)}`).join("\n\n");
   } else if (valid.length === 1) {
     // Single verse
     title = `${fullTitle} — ${first.chapter}:${first.verse}`;
@@ -272,7 +272,7 @@ function buildVerseEmbed(verses) {
         return `**${gTitle} — ${g[0].chapter}:${g[0].verse}**\n"${formatKJV(g[0].text)}"`;
       } else {
         const ref = `${g[0].chapter}:${g[0].verse}–${g[g.length - 1].verse}`;
-        const text = g.map(v => `**[${v.verse}]** ${formatKJV(v.text)}`).join("\n\n");
+        const text = g.map(v => `[${v.verse}] ${formatKJV(v.text)}`).join("\n\n");
         return `**${gTitle} — ${ref}**\n${text}`;
       }
     }).join("\n\n");

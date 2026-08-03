@@ -692,6 +692,118 @@ client.on("guildCreate", async (guild) => {
   await onboardGuild(guild);
 });
 
+// ── Build interactive setup embed ────────────────────────────────────────────
+const COMMON_TIMEZONES = [
+  { label: "UTC", value: "UTC" },
+  { label: "Singapore (SGT)", value: "Asia/Singapore" },
+  { label: "Tokyo (JST)", value: "Asia/Tokyo" },
+  { label: "Hong Kong (HKT)", value: "Asia/Hong_Kong" },
+  { label: "India (IST)", value: "Asia/Kolkata" },
+  { label: "Dubai (GST)", value: "Asia/Dubai" },
+  { label: "Central Europe (CET)", value: "Europe/Berlin" },
+  { label: "UK (GMT/BST)", value: "Europe/London" },
+  { label: "US Eastern (EST)", value: "America/New_York" },
+  { label: "US Central (CST)", value: "America/Chicago" },
+  { label: "US Mountain (MST)", value: "America/Denver" },
+  { label: "US Pacific (PST)", value: "America/Los_Angeles" },
+  { label: "Brazil (BRT)", value: "America/Sao_Paulo" },
+  { label: "Australia (AEST)", value: "Australia/Sydney" },
+];
+
+function buildSetupEmbed(guildId) {
+  const server = getServer(guildId) || {};
+  const channelName = server.channel_name || "Not set";
+  const webhookStatus = server.webhook_url ? "\u2705 Configured" : "\u274C Not set";
+  const [h] = (server.verse_time || "12:00").split(":").map(Number);
+  const tz = server.timezone || "UTC";
+  const roleLabel = !server.role_id || server.role_id === "everyone" ? "@everyone" : "<@&" + server.role_id + ">";
+  const activeStatus = server.active ? "\u2705 Active" : "\u274C Paused";
+
+  const embed = new EmbedBuilder()
+    .setAuthor({ name: "KJB Reader", iconURL: KJB_LOGO })
+    .setTitle("\u2699\uFE0F KJB Reader Setup")
+    .setDescription([
+      "Configure daily verse delivery below.",
+      "",
+      "**Channel:** #" + channelName,
+      "**Webhook:** " + webhookStatus,
+      "**Delivery Time:** " + h + ":00 UTC (" + tz + ")",
+      "**Ping Role:** " + roleLabel,
+      "**Status:** " + activeStatus,
+      "",
+      "Select a channel, role, timezone, or time below to update.",
+    ].join("\n"))
+    .setColor(0xC8922E)
+    .setThumbnail(KJB_LOGO)
+    .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+
+  const channelRow = new ActionRowBuilder().addComponents(
+    new ChannelSelectMenuBuilder()
+      .setCustomId("setup_channel")
+      .setPlaceholder("Channel: #" + channelName)
+      .addChannelTypes(0, 5, 10, 11, 12)
+  );
+
+  const roleRow = new ActionRowBuilder().addComponents(
+    new RoleSelectMenuBuilder()
+      .setCustomId("setup_role")
+      .setPlaceholder("Ping role: " + roleLabel)
+  );
+
+  const tzRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("setup_tz")
+      .setPlaceholder("Timezone: " + tz)
+      .addOptions(COMMON_TIMEZONES.map(t => ({
+        label: t.label,
+        value: t.value,
+        default: t.value === tz,
+      })))
+  );
+
+  const timeRow1 = new ActionRowBuilder().addComponents(
+    [0, 1, 2, 3, 4, 5].map(hr =>
+      new ButtonBuilder()
+        .setCustomId("setup_time||" + hr)
+        .setLabel(hr + ":00")
+        .setStyle(h === hr ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    )
+  );
+
+  const timeRow2 = new ActionRowBuilder().addComponents(
+    [6, 7, 8, 9, 10, 11].map(hr =>
+      new ButtonBuilder()
+        .setCustomId("setup_time||" + hr)
+        .setLabel(hr + ":00")
+        .setStyle(h === hr ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    )
+  );
+
+  const timeRow3 = new ActionRowBuilder().addComponents(
+    [12, 13, 14, 15, 16, 17].map(hr =>
+      new ButtonBuilder()
+        .setCustomId("setup_time||" + hr)
+        .setLabel(hr + ":00")
+        .setStyle(h === hr ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    )
+  );
+
+  const timeRow4 = new ActionRowBuilder().addComponents(
+    [18, 19, 20, 21, 22, 23].map(hr =>
+      new ButtonBuilder()
+        .setCustomId("setup_time||" + hr)
+        .setLabel(hr + ":00")
+        .setStyle(h === hr ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    )
+  );
+
+  return {
+    embeds: [embed],
+    components: [channelRow, roleRow, tzRow, timeRow1, timeRow2, timeRow3, timeRow4],
+    allowedMentions: { parse: [] },
+  };
+}
+
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   const content = message.content;

@@ -300,24 +300,36 @@ function buildVerseEmbed(verses) {
       new ButtonBuilder().setCustomId(`copyref|${shortRef}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel("📋 Copy"),
     ));
   } else {
-    // Multi-ref: NO Prev/Next, individual Copy buttons + TOC
-    // Row 1: TOC + up to 4 Copy buttons (5 buttons max per row)
-    const copyButtons = verses.slice(0, 4).map(v => {
-      const ref = `${v.book} ${v.chapter}:${v.verse}`;
-      return new ButtonBuilder().setCustomId(`copyref|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(`📋 ${ref}`);
+    // Multi-ref: grouped Copy buttons (one per range/group) + TOC
+    // Row 1: TOC + up to 4 group Copy buttons
+    const groupButtons = groups.slice(0, 4).map(g => {
+      const gFirst = g[0], gLast = g[g.length - 1];
+      const ref = g.length === 1
+        ? `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
+        : `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
+      const label = g.length === 1
+        ? `📋 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
+        : `📋 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
+      return new ButtonBuilder().setCustomId(`copyref|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
     });
     rows.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
-      ...copyButtons
+      ...groupButtons
     ));
     
-    // If more than 4 verses, add remaining copy buttons in row 2
-    if (verses.length > 4) {
-      const copyButtons2 = verses.slice(4, 9).map(v => {
-        const ref = `${v.book} ${v.chapter}:${v.verse}`;
-        return new ButtonBuilder().setCustomId(`copyref|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(`📋 ${ref}`);
+    // If more than 4 groups, add remaining in row 2
+    if (groups.length > 4) {
+      const groupButtons2 = groups.slice(4, 9).map(g => {
+        const gFirst = g[0], gLast = g[g.length - 1];
+        const ref = g.length === 1
+          ? `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
+          : `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
+        const label = g.length === 1
+          ? `📋 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
+          : `📋 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
+        return new ButtonBuilder().setCustomId(`copyref|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
       });
-      rows.push(new ActionRowBuilder().addComponents(...copyButtons2));
+      rows.push(new ActionRowBuilder().addComponents(...groupButtons2));
     }
   }
 

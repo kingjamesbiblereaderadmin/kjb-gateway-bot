@@ -444,6 +444,32 @@ function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page =
 }
 
 // Bible TOC embed — matches V3: OT/NT + Start Reading + Daily Verse
+function buildBookTocEmbed(book, pageIdx = 0) {
+  const totalChapters = KJV_BOOKS[book] || 0;
+  if (totalChapters === 0) return null;
+  const pageSize = 25;
+  const start = pageIdx * pageSize;
+  const end = Math.min(start + pageSize, totalChapters);
+  const btns = [];
+  for (let ch = start + 1; ch <= end; ch++) btns.push(new ButtonBuilder().setCustomId(`toc_ch|${book}||${ch}`).setStyle(ButtonStyle.Secondary).setLabel(`${ch}`));
+  const rows = [];
+  for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(...btns.slice(i, i + 5)));
+  const totalPages = Math.ceil(totalChapters / pageSize);
+  if (totalPages > 1) {
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`toc|${book}||${pageIdx - 1}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev").setDisabled(pageIdx === 0),
+      new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 Bible TOC"),
+      new ButtonBuilder().setCustomId(`toc|${book}||${pageIdx + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next ▶").setDisabled(pageIdx >= totalPages - 1),
+    ));
+  }
+  const embed = new EmbedBuilder()
+    .setTitle(`📖 ${KJV_FULL_TITLES[book] || book}`)
+    .setDescription(`Select a chapter to read:\n\n${totalPages > 1 ? `Chapters ${start + 1}–${end} of ${totalChapters}` : `${totalChapters} chapter${totalChapters !== 1 ? "s" : ""}`}`)
+    .setColor(0xC8922E).setThumbnail(KJB_LOGO)
+    .setFooter({ text: `KJB Reader • ${totalPages > 1 ? `Page ${pageIdx + 1} of ${totalPages} • ` : ""}kingjamesbiblereader.com` });
+  return { embeds: [embed], components: rows };
+}
+
 function buildBibleTocEmbed(page = 0) {
   const embed = new EmbedBuilder()
     .setTitle("📖 Holy Bible — King James Bible")
@@ -1587,6 +1613,216 @@ client.on("interactionCreate", async (interaction) => {
     return;
   }
 
+  // ============ SLASH COMMANDS ============
+  if (interaction.isAutocomplete()) {
+    try {
+      const focused = interaction.options.getFocused(true);
+      if (focused.name === "book") {
+        const q = (focused.value || "").toLowerCase();
+        const matches = ALL_BOOKS.filter(b => b.toLowerCase().includes(q)).slice(0, 25);
+        await interaction.respond(matches.map(b => ({ name: b, value: b })));
+      } else {
+        await interaction.respond([]);
+      }
+    } catch (e) { console.error("autocomplete:", e.message); }
+    return;
+  }
+
+  if (interaction.isChatInputCommand()) {
+    const { commandName } = interaction;
+    try {
+      if (commandName === "verse") {
+        const refText = interaction.options.getString("reference");
+        if (!refText) { await interaction.reply(buildBibleTocEmbed(0)); return; }
+        const parsed = parseRef(refText);
+        if (!parsed) { await interaction.reply({ content: `❌ Couldn't understand "${refText}".`, flags: 64 }); return; }
+        if (parsed.verseStart) {
+          const verses = (await resolveRefRange(refText)).filter(isValidVerse);
+          if (verses.length) await interaction.reply(buildVerseEmbed(verses));
+          else await interaction.reply({ content: `❌ "${refText}" not found in the KJB.`, flags: 64 });
+        } else {
+          const data = await callBibleApi({ action: "getChapter", book: parsed.book, chapter: parsed.chapter });
+          if (data?.verses?.length) await interaction.reply(buildChapterEmbed(parsed.book, parsed.chapter, data.verses, data.colophon, data.bookFullName));
+          else await interaction.reply({ content: `❌ ${parsed.book} ${parsed.chapter} not found.`, flags: 64 });
+        }
+        return;
+      }
+
+      if (commandName === "chapter") {
+        const bookInput = interaction.options.getString("book");
+        const number = interaction.options.getInteger("number");
+        if (!bookInput) { await interaction.reply(buildBibleTocEmbed(0)); return; }
+        const book = resolveBook(bookInput);
+        if (!book || !KJV_BOOKS[book]) { await interaction.reply({ content: `❌ Unknown book "${bookInput}".`, flags: 64 }); return; }
+        if (!number) { const r = buildBookTocEmbed(book, 0); await interaction.reply(r || { content: `❌ ${book} not found.`, flags: 64 }); return; }
+        const data = await callBibleApi({ action: "getChapter", book, chapter: number });
+        if (data?.verses?.length) await interaction.reply(buildChapterEmbed(book, number, data.verses, data.colophon, data.bookFullName));
+        else await interaction.reply({ content: `❌ ${book} ${number} not found.`, flags: 64 });
+        return;
+      }
+
+      if (commandName === "random") {
+        const type = interaction.options.getString("type") || "verse";
+        if (type === "chapter") {
+          const book = ALL_BOOKS[Math.floor(Math.random() * ALL_BOOKS.length)];
+          const chapter = Math.floor(Math.random() * KJV_BOOKS[book]) + 1;
+          const data = await callBibleApi({ action: "getChapter", book, chapter });
+          if (data?.verses?.length) await interaction.reply(buildChapterEmbed(book, chapter, data.verses, data.colophon, data.bookFullName));
+          else await interaction.reply({ content: "❌ Could not fetch a random chapter.", flags: 64 });
+        } else {
+          const data = await callBibleApi({ action: "random_verse" });
+          if (data?.verse) await interaction.reply(buildVerseEmbed([data.verse]));
+          else await interaction.reply({ content: "❌ Could not fetch a random verse.", flags: 64 });
+        }
+        return;
+      }
+
+      if (commandName === "daily") {
+        const now = new Date();
+        const data = await callBibleApi({ action: "daily_verse", clientDate: `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}` });
+        const v = data?.verse || data;
+        if (v?.text) await interaction.reply(buildDailyVerseEmbed(v));
+        else await interaction.reply({ content: "❌ Could not fetch today's verse.", flags: 64 });
+        return;
+      }
+
+      if (commandName === "gospel") { await interaction.reply(buildGospelEmbed(0)); return; }
+
+      if (commandName === "toc") {
+        const bookInput = interaction.options.getString("book");
+        if (!bookInput) { await interaction.reply(buildBibleTocEmbed(0)); return; }
+        const book = resolveBook(bookInput);
+        const r = book ? buildBookTocEmbed(book, 0) : null;
+        await interaction.reply(r || { content: `❌ Unknown book "${bookInput}".`, flags: 64 });
+        return;
+      }
+
+      if (commandName === "search") {
+        const query = interaction.options.getString("keyword")?.trim();
+        if (!query) { await interaction.reply({ content: "❌ Please provide a keyword.", flags: 64 }); return; }
+        await interaction.deferReply();
+        const words = query.toLowerCase().split(/[,;\s]+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
+        if (!words.length) { await interaction.editReply({ content: "❌ Please provide a keyword." }); return; }
+        let results;
+        if (words.length === 1) {
+          const searchData = await callBibleApi({ action: "search", query: words[0], offset: 0 });
+          results = { total: searchData?.total || 0, verses: searchData?.results || [] };
+        } else {
+          const allSets = await Promise.all(words.map(async w => {
+            const all = [];
+            for (let off = 0; off < 1000; off += 100) {
+              const d = await callBibleApi({ action: "search", query: w, offset: off });
+              const batch = d?.results || [];
+              if (!batch.length) break;
+              all.push(...batch);
+            }
+            return all;
+          }));
+          let minIdx = 0;
+          for (let i = 1; i < allSets.length; i++) { if (allSets[i].length < allSets[minIdx].length) minIdx = i; }
+          const otherSets = allSets.filter((_, i) => i !== minIdx).map(s => new Set(s.map(v => v.ref || `${v.book} ${v.chapter}:${v.verse}`)));
+          results = {
+            total: 0,
+            verses: allSets[minIdx].filter(v => {
+              const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
+              return otherSets.every(s => s.has(ref));
+            })
+          };
+          results.total = results.verses.length;
+        }
+        if (!results.total) { await interaction.editReply({ content: `❌ No verses found for "**${query}**".` }); return; }
+        await interaction.editReply(buildSearchEmbed(query, words, results.total, results.verses, 0));
+        return;
+      }
+
+      if (commandName === "help") {
+        const helpEmbed = new EmbedBuilder()
+          .setTitle("📖 KJB Reader — Help")
+          .setDescription([
+            "**Slash commands:**",
+            "• `/verse [reference]` — Verse lookup (e.g. `John 3:16`, `1 Corinthians 15:1-4`) or Table of Contents",
+            "• `/chapter [book] [number]` — Read a chapter or browse a book's chapters",
+            "• `/random [type]` — Random verse or chapter",
+            "• `/daily` — Today's daily verse",
+            "• `/search [keyword]` — Search verses by keyword",
+            "• `/toc [book]` — Browse the Bible table of contents",
+            "• `/gospel` — How to be saved",
+            "• `/setup` — (Server admin) Configure daily verse delivery",
+            "",
+            "**Or just type naturally** in any channel — no slash needed:",
+            "`John 3:16`, `Psalm 23`, `random`, `search faith`, `daily`, `toc`, `gospel`",
+            "",
+            "**Support:**",
+            "Join our Discord: **[kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)**",
+            "📧 Email: **[Kingjamesbiblereader@outlook.sg](mailto:Kingjamesbiblereader@outlook.sg)**",
+            "",
+            "Bible App powered by **[kingjamesbiblereader.com](https://kingjamesbiblereader.com)**",
+          ].join("\n"))
+          .setColor(0xC8922E).setThumbnail(KJB_LOGO)
+          .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+        await interaction.reply({ embeds: [helpEmbed] });
+        return;
+      }
+
+      if (commandName === "setup") {
+        if (!interaction.guild) { await interaction.reply({ content: "❌ Setup can only be used in a server.", flags: 64 }); return; }
+        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageGuild)) {
+          await interaction.reply({ content: "❌ You need **Manage Server** permission to use setup.", flags: 64 });
+          return;
+        }
+        await interaction.reply(buildSetupEmbed(interaction.guild.id));
+        return;
+      }
+
+      if (commandName === "fix") {
+        if (!interaction.guild) { await interaction.reply({ content: "❌ Fix can only be used in a server.", flags: 64 }); return; }
+        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageGuild)) {
+          await interaction.reply({ content: "❌ You need **Manage Server** permission to use this.", flags: 64 });
+          return;
+        }
+        await interaction.deferReply({ flags: 64 });
+        const steps = [];
+        let server = getServer(interaction.guild.id) || {};
+        let webhookUrl = server.webhook_url;
+        try {
+          if (webhookUrl) {
+            const testRes = await fetch(webhookUrl, { method: "GET" });
+            if (testRes.status === 404 || testRes.status === 410) {
+              webhookUrl = "";
+              steps.push("⚠️ Existing webhook was dead");
+            } else {
+              await patchWebhookAvatar(webhookUrl);
+              steps.push("✅ Webhook OK (avatar patched)");
+            }
+          }
+          if (!webhookUrl) {
+            const { channel } = await ensureDailyVerseChannel(interaction.guild);
+            if (channel?.createWebhook) {
+              const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
+              webhookUrl = webhook.url;
+              updateServer(interaction.guild.id, { webhook_url: webhookUrl, channel_name: channel.name });
+              steps.push(`✅ Created webhook in #${channel.name}`);
+            } else {
+              steps.push("❌ Could not create webhook — check my **Manage Webhooks** permission.");
+            }
+          }
+        } catch (e) {
+          steps.push("❌ Webhook repair failed: " + e.message);
+        }
+        updateServer(interaction.guild.id, { last_sent_date: "" });
+        steps.push("✅ Delivery schedule reset");
+        await interaction.editReply({ content: steps.join("\n") });
+        return;
+      }
+    } catch (e) {
+      console.error(`slash command ${commandName}:`, e.message);
+      const errPayload = { content: "❌ Something went wrong. Try again!", flags: 64 };
+      if (interaction.deferred || interaction.replied) await interaction.editReply(errPayload).catch(() => {});
+      else await interaction.reply(errPayload).catch(() => {});
+    }
+    return;
+  }
+
   if (!interaction.isButton()) return;
   const customId = interaction.customId;
 
@@ -1802,30 +2038,10 @@ client.on("interactionCreate", async (interaction) => {
   if (customId.startsWith("toc|")) {
     const parts = customId.slice("toc|".length).split("||");
     const book = parts[0];
-    const totalChapters = KJV_BOOKS[book] || 0;
-    if (totalChapters === 0) return;
-    const pageSize = 25;
     const pageIdx = parseInt(parts[1]) || 0;
-    const start = pageIdx * pageSize;
-    const end = Math.min(start + pageSize, totalChapters);
-    const btns = [];
-    for (let ch = start + 1; ch <= end; ch++) btns.push(new ButtonBuilder().setCustomId(`toc_ch|${book}||${ch}`).setStyle(ButtonStyle.Secondary).setLabel(`${ch}`));
-    const rows = [];
-    for (let i = 0; i < btns.length; i += 5) rows.push(new ActionRowBuilder().addComponents(...btns.slice(i, i + 5)));
-    const totalPages = Math.ceil(totalChapters / pageSize);
-    if (totalPages > 1) {
-      rows.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`toc|${book}||${pageIdx - 1}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev").setDisabled(pageIdx === 0),
-        new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 Bible TOC"),
-        new ButtonBuilder().setCustomId(`toc|${book}||${pageIdx + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next ▶").setDisabled(pageIdx >= totalPages - 1),
-      ));
-    }
-    const embed = new EmbedBuilder()
-      .setTitle(`📖 ${KJV_FULL_TITLES[book] || book}`)
-      .setDescription(`Select a chapter to read:\n\n${totalPages > 1 ? `Chapters ${start + 1}–${end} of ${totalChapters}` : `${totalChapters} chapter${totalChapters !== 1 ? "s" : ""}`}`)
-      .setColor(0xC8922E).setThumbnail(KJB_LOGO)
-      .setFooter({ text: `KJB Reader • ${totalPages > 1 ? `Page ${pageIdx + 1} of ${totalPages} • ` : ""}kingjamesbiblereader.com` });
-    await interaction.update({ embeds: [embed], components: rows });
+    const result = buildBookTocEmbed(book, pageIdx);
+    if (!result) return;
+    await interaction.update(result);
     return;
   }
 

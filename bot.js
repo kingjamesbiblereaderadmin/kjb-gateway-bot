@@ -569,8 +569,17 @@ client.on("messageCreate", async (message) => {
           if (d?.verses?.[0]) allVerses.push(d.verses[0]);
         }
       }
-      if (allVerses.length) {
-        await message.reply(buildVerseEmbed(allVerses));
+      // Deduplicate by ref and sort by chapter, then verse
+      const seen = new Set();
+      const deduped = allVerses.filter(v => {
+        const ref = `${v.book} ${v.chapter}:${v.verse}`;
+        if (seen.has(ref)) return false;
+        seen.add(ref);
+        return true;
+      }).sort((a, b) => a.chapter - b.chapter || a.verse - b.verse);
+      
+      if (deduped.length) {
+        await message.reply(buildVerseEmbed(deduped));
       } else {
         if (isMention) await message.reply({ content: "❌ Verses not found.", allowedMentions: { repliedUser: false } });
       }

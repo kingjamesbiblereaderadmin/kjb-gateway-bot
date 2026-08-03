@@ -272,7 +272,7 @@ function buildVerseEmbed(verses) {
         return `**${gTitle} — ${g[0].chapter}:${g[0].verse}**\n"${formatKJV(g[0].text)}"`;
       } else {
         const ref = `${g[0].chapter}:${g[0].verse}–${g[g.length - 1].verse}`;
-        const text = g.map(v => `**[${v.verse}]** ${formatKJV(v.text)}`).join(" ");
+        const text = g.map(v => `**[${v.verse}]** ${formatKJV(v.text)}`).join("\n\n");
         return `**${gTitle} — ${ref}**\n${text}`;
       }
     }).join("\n\n");

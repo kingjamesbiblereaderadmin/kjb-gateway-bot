@@ -153,10 +153,54 @@ const client = new Client({
   ],
 });
 
-client.once("ready", () => {
+
+// Auto-create #kjb-bot-updates channel in a guild
+async function ensureUpdatesChannel(guildId) {
+  try {
+    const chRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
+      headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}` },
+    });
+    if (!chRes.ok) return false;
+    const channels = await chRes.json();
+    const existing = channels.find(c => [0, 5].includes(c.type) && /kjb.?bot.?update|bot.?update/i.test(c.name));
+    if (existing) return true;
+    const firstCategory = channels.find(c => c.type === 4);
+    // Try announcement channel first (type 5), fall back to text (type 0)
+    const body = { name: "kjb-bot-updates", type: 5, topic: "KJB Reader bot updates — new features and announcements" };
+    if (firstCategory) body.parent_id = firstCategory.id;
+    const announceRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (announceRes.ok) { console.log(`  ✅ Created #kjb-bot-updates in ${guildId}`); return true; }
+    // Fall back to text channel
+    body.type = 0;
+    const textRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (textRes.ok) { console.log(`  ✅ Created #kjb-bot-updates (text) in ${guildId}`); return true; }
+    console.log(`  ⚠️ Could not create #kjb-bot-updates in ${guildId} (need Manage Channels)`);
+    return false;
+  } catch (e) { console.error("ensureUpdatesChannel:", e.message); return false; }
+}
+
+client.once("ready", async () => {
   console.log(`✅ KJB Gateway Bot online as ${client.user.tag}`);
   console.log(`   Listening for Bible references in ${client.guilds.cache.size} servers`);
   client.user.setActivity("KJB Reader | type a verse or command", { type: 3 });
+  // Auto-create #kjb-bot-updates in all guilds
+  for (const [gid, guild] of client.guilds.cache) {
+    await ensureUpdatesChannel(gid);
+  }
+});
+
+// Auto-create #kjb-bot-updates when joining a new guild
+client.on("guildCreate", async (guild) => {
+  console.log(`📥 Joined new guild: ${guild.id}`);
+  await ensureUpdatesChannel(guild.id);
 });
 
 client.on("messageCreate", async (message) => {

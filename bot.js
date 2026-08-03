@@ -308,20 +308,31 @@ client.on("messageCreate", async (message) => {
       const keywords = query.split(/\s+/).filter(Boolean);
       const data = await callBibleApi({ action: "find_by_length", keywords });
       const results = data?.verses || data?.results || [];
+      const total = data?.total || results.length;
       if (!results.length) {
         await message.reply({ content: `❌ No verses found for "**${query}**".`, allowedMentions: { repliedUser: false } });
         return;
       }
+      // Fetch verse text for top 10 results
       const show = results.slice(0, 10);
-      let desc = show.map(v => `**${v.book} ${v.chapter}:${v.verse}** — ${stripMd(v.text).slice(0, 120)}${v.text.length > 120 ? "..." : ""}`).join("\n\n");
-      if (results.length > 10) desc += `\n\n*...and ${results.length - 10} more results.*`;
+      const refs = show.map(v => `${v.book} ${v.chapter}:${v.verse}`);
+      const verseData = await callBibleApi({ action: "resolve_refs", refs });
+      const verses = verseData?.verses || [];
+      // Build display with fetched text
+      let desc = show.map((r, i) => {
+        const v = verses[i];
+        const textSnippet = v ? stripMd(v.text).slice(0, 120) : "";
+        const ellipsis = v && v.text && v.text.length > 120 ? "..." : "";
+        return `**${r.book} ${r.chapter}:${r.verse}** — ${textSnippet}${ellipsis}`;
+      }).join("\n\n");
+      if (total > 10) desc += `\n\n*...and ${total - 10} more results.*`;
       if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
       const embed = new EmbedBuilder()
         .setTitle(`🔍 Search: "${query}"`)
         .setDescription(desc)
         .setColor(0xC8922E)
         .setThumbnail(KJB_LOGO)
-        .setFooter({ text: `KJB Reader • ${results.length} result${results.length !== 1 ? "s" : ""} • kingjamesbiblereader.com` });
+        .setFooter({ text: `KJB Reader • ${total} result${total !== 1 ? "s" : ""} • kingjamesbiblereader.com` });
       await message.reply({ embeds: [embed] });
     } catch (e) {
       console.error("search:", e.message);

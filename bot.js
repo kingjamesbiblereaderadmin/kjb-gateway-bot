@@ -702,7 +702,7 @@ async function onboardGuild(guild) {
             "This channel is for bot announcements and feature updates.",
             "",
             "Type `help` anywhere to see all commands.",
-          ].join("\\n"))
+          ].join("\n"))
           .setColor(0xC8922E)
           .setThumbnail(KJB_LOGO)
           .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });

@@ -523,137 +523,148 @@ client.on("ready", async () => {
       const existing = servers.find(s => s.guild_id === guild.id);
       if (!existing) {
         console.log(`📝 Syncing new guild: ${guild.id}`);
-        let channel = guild.channels.cache.find(c => c.name === "kjb-bot-updates" && c.isTextBased());
-        if (!channel) channel = guild.channels.cache.find(c => /daily.?verse|bible.?verse|devotion/i.test(c.name) && c.isTextBased());
-        if (!channel) {
-          try {
-            channel = await guild.channels.create({ name: "kjb-bot-updates", topic: "KJB Reader — Daily Bible verses & updates", type: 0 });
-          } catch (e) { console.error("channel create:", e.message); }
-        }
-        if (channel?.send) {
-          let webhookUrl = "";
-          try {
-            const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
-            webhookUrl = webhook.url;
-          } catch (e) { console.error("webhook:", e.message); }
-          updateServer(guild.id, { channel_name: channel.name, webhook_url: webhookUrl, updates_ready: true });
-          const embed = new EmbedBuilder()
-            .setTitle("📖 KJB Reader — Ready!")
-            .setDescription(["**Welcome!** KJB Reader is now active.", "", "**No slash commands needed — just type:**", "• `John 3:16` — Verse lookup", "• `Psalm 23` — Full chapter", "• `daily` — Today's verse", "• `search faith` — Search by keyword", "• `toc` — Browse the Bible", "• `gospel` — How to be saved", "• `setup` — Configure daily delivery", "• `help` — Full command list", "", "**Support:** [kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)", "📧 Kingjamesbiblereader@outlook.sg"].join("\n"))
-            .setColor(0xC8922E).setThumbnail(KJB_LOGO)
-            .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
-          await channel.send({ embeds: [embed] });
-        }
+        await onboardGuild(guild);
       }
     }
   } catch (e) { console.error("ready sync:", e.message); }
 });
 
-// Common timezones for the select menu
-const COMMON_TIMEZONES = [
-  { label: "UTC", value: "UTC" },
-  { label: "Singapore (SGT)", value: "Asia/Singapore" },
-  { label: "Tokyo (JST)", value: "Asia/Tokyo" },
-  { label: "Hong Kong (HKT)", value: "Asia/Hong_Kong" },
-  { label: "India (IST)", value: "Asia/Kolkata" },
-  { label: "Dubai (GST)", value: "Asia/Dubai" },
-  { label: "London (GMT/BST)", value: "Europe/London" },
-  { label: "Paris (CET)", value: "Europe/Paris" },
-  { label: "New York (EST)", value: "America/New_York" },
-  { label: "Chicago (CST)", value: "America/Chicago" },
-  { label: "Denver (MST)", value: "America/Denver" },
-  { label: "Los Angeles (PST)", value: "America/Los_Angeles" },
-  { label: "São Paulo (BRT)", value: "America/Sao_Paulo" },
-  { label: "Sydney (AEDT)", value: "Australia/Sydney" },
-  { label: "Auckland (NZDT)", value: "Pacific/Auckland" },
-];
+// ── Guild Onboarding (matches original discordGuildJoin behavior) ─────────────
+async function ensureDailyVerseChannel(guild) {
+  const channels = [...guild.channels.cache.values()];
+  // 1. Prefer existing #daily-verse / #bible-verse / #devotion channel
+  const existing = channels.find(c => /daily.?verse|bible.?verse|devotion|scripture/i.test(c.name) && c.isTextBased());
+  if (existing) return { channel: existing, isNew: false };
+  // 2. Try announcement channel (requires Community mode)
+  const firstCategory = channels.find(c => c.type === 4);
+  let channel;
+  try {
+    const createOpts = { name: "daily-verse", topic: "Daily King James Bible verse — powered by KJB Reader", type: 5 };
+    if (firstCategory) createOpts.parentId = firstCategory.id;
+    channel = await guild.channels.create(createOpts);
+    return { channel, isNew: true };
+  } catch (e) {
+    // 3. Fall back to regular text channel
+    const textOpts = { name: "daily-verse", topic: "Daily King James Bible verse — powered by KJB Reader", type: 0 };
+    if (firstCategory) textOpts.parentId = firstCategory.id;
+    channel = await guild.channels.create(textOpts);
+    return { channel, isNew: true };
+  }
+}
 
-function buildSetupEmbed(guildId) {
-  const server = getServer(guildId) || {};
-  const [h] = (server.verse_time || "08:00").split(":").map(Number);
-  const tzLabel = server.timezone || "UTC";
-  const roleLabel = !server.role_id || server.role_id === "everyone" ? "@everyone" : `<@&${server.role_id}>`;
+async function ensureUpdatesChannel(guild) {
+  const channels = [...guild.channels.cache.values()];
+  // Check if kjb-bot-updates channel already exists
+  const existing = channels.find(c => /kjb.?bot.?update|bot.?update/i.test(c.name) && c.isTextBased());
+  if (existing) return;
+  const firstCategory = channels.find(c => c.type === 4);
+  try {
+    const opts = { name: "kjb-bot-updates", topic: "KJB Reader bot updates — new features and announcements", type: 5 };
+    if (firstCategory) opts.parentId = firstCategory.id;
+    await guild.channels.create(opts);
+  } catch (e) {
+    const opts = { name: "kjb-bot-updates", topic: "KJB Reader bot updates — new features and announcements", type: 0 };
+    if (firstCategory) opts.parentId = firstCategory.id;
+    try { await guild.channels.create(opts); } catch {}
+  }
+}
 
-  const embed = new EmbedBuilder()
-    .setTitle("📖 KJB Reader — Setup")
+function buildWelcomeEmbed() {
+  return new EmbedBuilder()
+    .setAuthor({ name: "KJB Reader", iconURL: KJB_LOGO })
+    .setTitle("📖 Welcome to KJB Reader!")
     .setDescription([
-      "Configure daily verse delivery for this server.",
+      "Daily Bible verses from the **King James Bible**, delivered every morning at **8:00 AM UTC**.",
       "",
-      `**Channel:** ${server.channel_name || "Not set"}`,
-      `**Delivery Time:** ${h}:00 ${tzLabel}`,
-      `**Ping Role:** ${roleLabel}`,
-      `**Active:** ${server.active ? "✅ Yes" : "❌ No"}`,
+      "Daily verses will ping **@everyone**. Use `setup` to change.",
       "",
-      "Select a channel, role, timezone, and time below.",
-      "Then type `enable` to start daily delivery.",
+      "**Commands — just type (no slash needed):**",
+      "`John 3:16` — Verse lookup",
+      "`Psalm 23` — Full chapter",
+      "`daily` — Today's verse",
+      "`random` — Random verse or chapter",
+      "`search faith` — Search by keyword",
+      "`toc` — Browse the Bible",
+      "`gospel` — How to be saved",
+      "`setup` — Configure daily delivery",
+      "`help` — Full command list",
+      "",
+      "**Navigation**",
+      "◀ **Prev Vs** / **Next Vs ▶** — Browse verses without retyping",
+      "📖 **Read Chapter** — Jump to the full chapter",
+      "◀ **Prev Ch** / **Next Ch ▶** — Navigate between chapters",
+      "📋 **Copy** — Copy verse or chapter text to clipboard",
+      "",
+      "**Admin Setup**",
+      "`setup channel` — Change the daily verse channel",
+      "`setup update` — Change role, posting time, or timezone",
+      "`setup enable` / `setup disable` — Pause or resume notifications",
+      "`setup status` — View current configuration",
+      "`fix` — Repair the bot and send today's verse immediately",
+      "",
+      "**Support**",
+      "Join our Discord support server: **[kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)**",
+      "📧 Email: **Kingjamesbiblereader@outlook.sg**",
     ].join("\n"))
-    .setColor(0xC8922E).setThumbnail(KJB_LOGO)
+    .setColor(0xC8922E)
+    .setThumbnail(KJB_LOGO)
     .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+}
 
-  // Row 1: Channel select
-  const channelRow = new ActionRowBuilder().addComponents(
-    new ChannelSelectMenuBuilder()
-      .setCustomId("setup_channel")
-      .setPlaceholder("Select delivery channel...")
-      .setChannelTypes([0, 5, 10, 11, 12])
-  );
+async function onboardGuild(guild) {
+  try {
+    // 1. Create #daily-verse channel (or use existing)
+    const { channel, isNew } = await ensureDailyVerseChannel(guild);
+    // 2. Create #kjb-bot-updates channel for announcements
+    await ensureUpdatesChannel(guild);
 
-  // Row 2: Role select
-  const roleRow = new ActionRowBuilder().addComponents(
-    new RoleSelectMenuBuilder()
-      .setCustomId("setup_role")
-      .setPlaceholder("Select ping role (optional)...")
-  );
+    if (!channel?.send) {
+      console.error("onboardGuild: no channel available");
+      return;
+    }
 
-  // Row 3: Timezone select
-  const tzRow = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("setup_tz")
-      .setPlaceholder("Select timezone...")
-      .addOptions(COMMON_TIMEZONES)
-  );
+    // 3. Create webhook in daily-verse channel with KJB logo
+    let webhookUrl = "";
+    try {
+      const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
+      webhookUrl = webhook.url;
+    } catch (e) { console.error("onboardGuild webhook:", e.message); }
 
-  // Row 4-5: Time buttons (hours 0-23, 6 per row)
-  const timeRows = [];
-  const allTimeBtns = [];
-  for (let hr = 0; hr < 24; hr++) {
-    allTimeBtns.push(
-      new ButtonBuilder()
-        .setCustomId(`setup_time||${hr}`)
-        .setStyle(hr === h ? ButtonStyle.Primary : ButtonStyle.Secondary)
-        .setLabel(`${hr}:00`)
-    );
-  }
-  for (let i = 0; i < allTimeBtns.length; i += 5) {
-    timeRows.push(new ActionRowBuilder().addComponents(...allTimeBtns.slice(i, i + 5)));
-  }
+    // 4. Save to servers.json with defaults
+    updateServer(guild.id, {
+      guild_id: guild.id,
+      guild_name: null,
+      webhook_url: webhookUrl,
+      channel_name: channel.name,
+      role_id: "everyone",
+      setup_by: "auto (bot join)",
+      active: true,
+      photo_enabled: false,
+      verse_time: "08:00",
+      timezone: "UTC",
+      updates_ready: true,
+    });
 
-  return { embeds: [embed], components: [channelRow, roleRow, tzRow, ...timeRows] };
+    // 5. Post welcome message with @everyone ping via webhook
+    if (webhookUrl) {
+      try {
+        await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: "@everyone", embeds: [buildWelcomeEmbed()] }),
+        });
+      } catch (e) { console.error("onboardGuild welcome:", e.message); }
+    } else {
+      // Fallback: send via channel directly
+      await channel.send({ content: "@everyone", embeds: [buildWelcomeEmbed()] });
+    }
+
+    console.log(`✅ Onboarded guild ${guild.id}: #${channel.name} (new=${isNew})`);
+  } catch (e) { console.error("onboardGuild:", e.message); }
 }
 
 client.on("guildCreate", async (guild) => {
-  try {
-    let channel = guild.channels.cache.find(c => c.name === "kjb-bot-updates" && c.isTextBased());
-    if (!channel) channel = guild.channels.cache.find(c => /daily.?verse|bible.?verse|devotion/i.test(c.name) && c.isTextBased());
-    if (!channel) {
-      channel = await guild.channels.create({ name: "kjb-bot-updates", topic: "KJB Reader — Daily Bible verses & updates", type: 0 });
-    }
-    if (channel?.send) {
-      // Try to create a webhook so daily delivery works immediately
-      let webhookUrl = "";
-      try {
-        const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
-        webhookUrl = webhook.url;
-      } catch (e) { console.error("guildCreate webhook:", e.message); }
-      updateServer(guild.id, { channel_name: channel.name, webhook_url: webhookUrl, updates_ready: true });
-      const embed = new EmbedBuilder()
-        .setTitle("📖 KJB Reader — Ready!")
-        .setDescription(["**Welcome!** KJB Reader is now active.", "", "**No slash commands needed — just type:**", "• `John 3:16` — Verse lookup", "• `Psalm 23` — Full chapter", "• `daily` — Today's verse", "• `search faith` — Search by keyword", "• `toc` — Browse the Bible", "• `gospel` — How to be saved", "• `setup` — Configure daily delivery", "• `help` — Full command list", "", "**Support:** [kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)", "📧 Kingjamesbiblereader@outlook.sg"].join("\n"))
-        .setColor(0xC8922E).setThumbnail(KJB_LOGO)
-        .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
-      await channel.send({ embeds: [embed] });
-    }
-  } catch (e) { console.error("guildCreate:", e.message); }
+  await onboardGuild(guild);
 });
 
 client.on("messageCreate", async (message) => {

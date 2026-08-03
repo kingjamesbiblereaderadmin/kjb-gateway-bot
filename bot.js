@@ -1349,14 +1349,6 @@ client.on("messageCreate", async (message) => {
       steps.push("\u274C Updates channel check failed: " + e.message);
     }
 
-    // 3. Reset last_sent_date so next scheduled delivery will fire
-    try {
-      updateServer(message.guild.id, { last_sent_date: "" });
-      steps.push("\u2705 Delivery schedule reset");
-    } catch (e) {
-      steps.push("\u274C Could not reset schedule: " + e.message);
-    }
-
     const fixResult = new EmbedBuilder()
       .setAuthor({ name: "KJB Reader", iconURL: KJB_LOGO })
       .setTitle("\u2699\uFE0F Fix Complete")
@@ -1634,8 +1626,6 @@ client.on("interactionCreate", async (interaction) => {
     } catch (e) {
       steps.push("\u274C Webhook repair failed: " + e.message);
     }
-    updateServer(interaction.guild.id, { last_sent_date: "" });
-    steps.push("\u2705 Delivery schedule reset");
     await interaction.editReply({ content: steps.join("\n"), flags: 64 });
     return;
   }

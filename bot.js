@@ -714,7 +714,7 @@ async function onboardGuild(guild) {
 }
 
 client.on("guildCreate", async (guild) => {
-  await onboardGuild(guild);
+  try { await onboardGuild(guild); } catch (e) { console.error("guildCreate:", e?.message || e); }
 });
 
 // ── Build interactive setup embed ────────────────────────────────────────────

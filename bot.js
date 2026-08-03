@@ -5,6 +5,17 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ============ CRASH PROTECTION ============
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("⚠️ Unhandled Rejection:", reason?.message || reason);
+  console.error(reason?.stack || "");
+});
+process.on("uncaughtException", (err) => {
+  console.error("⚠️ Uncaught Exception:", err?.message || err);
+  console.error(err?.stack || "");
+  // Don't exit — try to keep running
+});
 const SERVERS_FILE = path.join(__dirname, "servers.json");
 
 function loadServers() {
@@ -184,8 +195,22 @@ function getPrevCh(book, ch) { if (ch > 1) return { book, chapter: ch - 1 }; con
 function getNextCh(book, ch) { if (ch < KJV_BOOKS[book]) return { book, chapter: ch + 1 }; const idx = BOOK_ORDER.indexOf(book); if (idx >= BOOK_ORDER.length - 1) return null; const n = BOOK_ORDER[idx + 1]; return { book: n, chapter: 1 }; }
 
 async function callBibleApi(payload) {
-  const r = await fetch(BIBLE_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-  return await r.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+  try {
+    const r = await fetch(BIBLE_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!r.ok) throw new Error(`API returned ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    throw e;
+  }
 }
 
 // ============ EMBED BUILDERS ============
@@ -1715,5 +1740,10 @@ cron.schedule("0 * * * *", () => {
 // Log startup
 console.log(`KJB Reader gateway bot starting...`);
 console.log(`Servers configured: ${loadServers().length}`);
+
+// Heartbeat — log every 5 min so we can see if the bot is alive
+setInterval(() => {
+  console.log(`[${new Date().toISOString()}] Heartbeat — ${client.guilds.cache.size} guilds, ${client.ws.ping}ms ping`);
+}, 300000);
 
 client.login(process.env.DISCORD_BOT_TOKEN);

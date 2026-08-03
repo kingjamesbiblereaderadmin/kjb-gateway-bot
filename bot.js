@@ -231,6 +231,22 @@ function buildVerseEmbed(verses) {
   const sameChapter = sameBook && valid.every(v => v.chapter === first.chapter);
   const isMultiRef = !sameChapter; // different books or different chapters
   
+  // Compute verse groups (contiguous verses in same book+chapter) — used by both description and buttons
+  const groups = [];
+  if (isMultiRef && valid.length > 1) {
+    let curGroup = [valid[0]];
+    for (let i = 1; i < valid.length; i++) {
+      const prev = valid[i - 1], curr = valid[i];
+      if (prev.book === curr.book && prev.chapter === curr.chapter && curr.verse === prev.verse + 1) {
+        curGroup.push(curr);
+      } else {
+        groups.push(curGroup);
+        curGroup = [curr];
+      }
+    }
+    groups.push(curGroup);
+  }
+  
   let title, desc;
   
   if (sameBook && sameChapter && valid.length > 1) {
@@ -250,19 +266,6 @@ function buildVerseEmbed(verses) {
   } else {
     // Multiple books or refs (e.g., 1 Cor 15:1-4, Romans 3:25, Eph 1:13)
     title = "Multiple Verses";
-    // Group contiguous verses (same book + chapter, sequential verse numbers)
-    const groups = [];
-    let curGroup = [valid[0]];
-    for (let i = 1; i < valid.length; i++) {
-      const prev = valid[i - 1], curr = valid[i];
-      if (prev.book === curr.book && prev.chapter === curr.chapter && curr.verse === prev.verse + 1) {
-        curGroup.push(curr);
-      } else {
-        groups.push(curGroup);
-        curGroup = [curr];
-      }
-    }
-    groups.push(curGroup);
     desc = groups.map(g => {
       const gTitle = KJV_FULL_TITLES[g[0].book] || g[0].book;
       if (g.length === 1) {

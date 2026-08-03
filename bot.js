@@ -514,7 +514,40 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 
 const GUILD_CHANNEL_MAP = new Map();
 
-client.on("ready", () => console.log(`✅ KJB Reader online as ${client.user.tag}`));
+client.on("ready", async () => {
+  console.log(`✅ KJB Reader online as ${client.user.tag}`);
+  // Sync any guilds not yet in servers.json (catches guilds added while offline)
+  try {
+    const guilds = [...client.guilds.cache.values()];
+    for (const guild of guilds) {
+      const existing = servers.find(s => s.guild_id === guild.id);
+      if (!existing) {
+        console.log(`📝 Syncing new guild: ${guild.id}`);
+        let channel = guild.channels.cache.find(c => c.name === "kjb-bot-updates" && c.isTextBased());
+        if (!channel) channel = guild.channels.cache.find(c => /daily.?verse|bible.?verse|devotion/i.test(c.name) && c.isTextBased());
+        if (!channel) {
+          try {
+            channel = await guild.channels.create({ name: "kjb-bot-updates", topic: "KJB Reader — Daily Bible verses & updates", type: 0 });
+          } catch (e) { console.error("channel create:", e.message); }
+        }
+        if (channel?.send) {
+          let webhookUrl = "";
+          try {
+            const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
+            webhookUrl = webhook.url;
+          } catch (e) { console.error("webhook:", e.message); }
+          updateServer(guild.id, { channel_name: channel.name, webhook_url: webhookUrl, updates_ready: true });
+          const embed = new EmbedBuilder()
+            .setTitle("📖 KJB Reader — Ready!")
+            .setDescription(["**Welcome!** KJB Reader is now active.", "", "**No slash commands needed — just type:**", "• `John 3:16` — Verse lookup", "• `Psalm 23` — Full chapter", "• `daily` — Today's verse", "• `search faith` — Search by keyword", "• `toc` — Browse the Bible", "• `gospel` — How to be saved", "• `setup` — Configure daily delivery", "• `help` — Full command list", "", "**Support:** [kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)", "📧 Kingjamesbiblereader@outlook.sg"].join("\n"))
+            .setColor(0xC8922E).setThumbnail(KJB_LOGO)
+            .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+          await channel.send({ embeds: [embed] });
+        }
+      }
+    }
+  } catch (e) { console.error("ready sync:", e.message); }
+});
 
 // Common timezones for the select menu
 const COMMON_TIMEZONES = [

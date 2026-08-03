@@ -242,7 +242,8 @@ async function callBibleApi(payload) {
 // dash ranges natively, so ranges must be expanded into individual fetches.
 async function resolveRefRange(ref) {
   const parsed = parseRef(ref);
-  if (parsed && parsed.verseStart && parsed.verseEnd) {
+  if (!parsed) return [];
+  if (parsed.verseStart && parsed.verseEnd) {
     const verses = [];
     for (let v = parsed.verseStart; v <= parsed.verseEnd; v++) {
       try {
@@ -252,7 +253,10 @@ async function resolveRefRange(ref) {
     }
     return verses;
   }
-  const d = await callBibleApi({ action: "resolve_refs", refs: [ref] });
+  // Single verse — must use the resolved canonical book name (e.g. "Eph" -> "Ephesians"),
+  // never the raw user input, since the API's resolve_refs does not understand abbreviations.
+  const singleRef = parsed.verseStart ? `${parsed.book} ${parsed.chapter}:${parsed.verseStart}` : ref;
+  const d = await callBibleApi({ action: "resolve_refs", refs: [singleRef] });
   return d?.verses || [];
 }
 

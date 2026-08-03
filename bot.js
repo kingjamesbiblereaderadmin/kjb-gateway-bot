@@ -305,25 +305,27 @@ client.on("messageCreate", async (message) => {
     const query = text.replace(/^search\s+/i, "").trim();
     if (!query) return;
     try {
-      const keywords = query.split(/\s+/).filter(Boolean);
-      const data = await callBibleApi({ action: "find_by_length", keywords });
-      const results = data?.verses || data?.results || [];
-      const total = data?.total || results.length;
-      if (!results.length) {
+      const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+      // API only supports single-word search — search first word, filter rest client-side
+      const searchData = await callBibleApi({ action: "search", query: words[0] });
+      let results = searchData?.results || [];
+      // Filter for remaining keywords (AND logic)
+      if (words.length > 1) {
+        results = results.filter(v => {
+          const text = (v.text || "").toLowerCase();
+          return words.slice(1).every(w => text.includes(w));
+        });
+      }
+      const total = results.length;
+      if (!total) {
         await message.reply({ content: `❌ No verses found for "**${query}**".`, allowedMentions: { repliedUser: false } });
         return;
       }
-      // Fetch verse text for top 10 results
       const show = results.slice(0, 10);
-      const refs = show.map(v => `${v.book} ${v.chapter}:${v.verse}`);
-      const verseData = await callBibleApi({ action: "resolve_refs", refs });
-      const verses = verseData?.verses || [];
-      // Build display with fetched text
-      let desc = show.map((r, i) => {
-        const v = verses[i];
-        const textSnippet = v ? stripMd(v.text).slice(0, 120) : "";
-        const ellipsis = v && v.text && v.text.length > 120 ? "..." : "";
-        return `**${r.book} ${r.chapter}:${r.verse}** — ${textSnippet}${ellipsis}`;
+      let desc = show.map(v => {
+        const textSnippet = stripMd(v.text || "").slice(0, 120);
+        const ellipsis = v.text && v.text.length > 120 ? "..." : "";
+        return `**${v.book} ${v.chapter}:${v.verse}** — ${textSnippet}${ellipsis}`;
       }).join("\n\n");
       if (total > 10) desc += `\n\n*...and ${total - 10} more results.*`;
       if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";

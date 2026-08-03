@@ -203,6 +203,37 @@ client.on("guildCreate", async (guild) => {
   await ensureUpdatesChannel(guild.id);
 });
 
+
+
+// Build paginated search embed (10 results per page)
+function buildSearchEmbed(query, words, total, verses, page) {
+  const perPage = 10;
+  const totalPages = Math.ceil(total / perPage);
+  const start = page * perPage;
+  const show = verses.slice(start, start + perPage);
+  let desc = show.map(v => {
+    const textSnippet = stripMd(v.text || "").slice(0, 120);
+    const ellipsis = v.text && v.text.length > 120 ? "..." : "";
+    return `**${v.book} ${v.chapter}:${v.verse}** — ${textSnippet}${ellipsis}`;
+  }).join("\n\n");
+  if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
+  const embed = new EmbedBuilder()
+    .setTitle(`🔍 Search: "${query}"`)
+    .setDescription(desc)
+    .setColor(0xC8922E)
+    .setThumbnail(KJB_LOGO)
+    .setFooter({ text: `KJB Reader • ${total} result${total !== 1 ? "s" : ""} • Page ${page + 1}/${totalPages} • kingjamesbiblereader.com` });
+  const rows = [];
+  if (totalPages > 1) {
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`srchpg|${query.slice(0, 80)}|${page - 1}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev").setDisabled(page === 0),
+      new ButtonBuilder().setCustomId(`nopg_srch_${page}`).setStyle(ButtonStyle.Secondary).setLabel(`${page + 1} / ${totalPages}`).setDisabled(true),
+      new ButtonBuilder().setCustomId(`srchpg|${query.slice(0, 80)}|${page + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next ▶").setDisabled(page >= totalPages - 1),
+    ));
+  }
+  return { embeds: [embed], components: rows };
+}
+
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
@@ -300,42 +331,40 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // Search
+  // Search (paginated)
   if (isShort && /^search\s+/i.test(text)) {
     const query = text.replace(/^search\s+/i, "").trim();
     if (!query) return;
     try {
       const words = query.toLowerCase().split(/\s+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
-      // API only supports single-word search — search first word, filter rest client-side
-      const searchData = await callBibleApi({ action: "search", query: words[0] });
-      let results = searchData?.results || [];
-      // Filter for remaining keywords (AND logic)
-      if (words.length > 1) {
-        results = results.filter(v => {
-          const text = (v.text || "").toLowerCase();
-          return words.slice(1).every(w => text.includes(w));
+      // Fetch results — single word uses API offset; multi-word fetches all pages then filters
+      let results;
+      if (words.length === 1) {
+        // Single word: just fetch first page, API offset handles the rest
+        const searchData = await callBibleApi({ action: "search", query: words[0], offset: 0 });
+        results = { total: searchData?.total || 0, verses: searchData?.results || [] };
+      } else {
+        // Multi-word: fetch up to 5 API pages (500 results) and filter client-side
+        const allResults = [];
+        let total = 0;
+        for (let off = 0; off < 500; off += 100) {
+          const searchData = await callBibleApi({ action: "search", query: words[0], offset: off });
+          const batch = searchData?.results || [];
+          if (!batch.length) break;
+          total = searchData?.total || total;
+          allResults.push(...batch);
+        }
+        const filtered = allResults.filter(v => {
+          const txt = (v.text || "").toLowerCase();
+          return words.slice(1).every(w => txt.includes(w));
         });
+        results = { total: filtered.length, verses: filtered };
       }
-      const total = results.length;
-      if (!total) {
+      if (!results.total) {
         await message.reply({ content: `❌ No verses found for "**${query}**".`, allowedMentions: { repliedUser: false } });
         return;
       }
-      const show = results.slice(0, 10);
-      let desc = show.map(v => {
-        const textSnippet = stripMd(v.text || "").slice(0, 120);
-        const ellipsis = v.text && v.text.length > 120 ? "..." : "";
-        return `**${v.book} ${v.chapter}:${v.verse}** — ${textSnippet}${ellipsis}`;
-      }).join("\n\n");
-      if (total > 10) desc += `\n\n*...and ${total - 10} more results.*`;
-      if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
-      const embed = new EmbedBuilder()
-        .setTitle(`🔍 Search: "${query}"`)
-        .setDescription(desc)
-        .setColor(0xC8922E)
-        .setThumbnail(KJB_LOGO)
-        .setFooter({ text: `KJB Reader • ${total} result${total !== 1 ? "s" : ""} • kingjamesbiblereader.com` });
-      await message.reply({ embeds: [embed] });
+      await message.reply(buildSearchEmbed(query, words, results.total, results.verses, 0));
     } catch (e) {
       console.error("search:", e.message);
       await message.reply({ content: "❌ Search failed. Try again!", allowedMentions: { repliedUser: false } });
@@ -559,6 +588,54 @@ client.on("interactionCreate", async (interaction) => {
   if (customId.startsWith("bibletoc|")) {
     const page = parseInt(customId.split("|")[1]) || 0;
     await interaction.update(buildBibleTocEmbed(page));
+    return;
+  }
+
+  // Search page navigation
+  if (customId.startsWith("srchpg|")) {
+    const parts = customId.slice("srchpg|".length).split("|");
+    const query = parts.slice(0, -1).join("|");
+    const page = parseInt(parts[parts.length - 1]) || 0;
+    if (page < 0) return;
+    try {
+      await interaction.deferUpdate();
+      const words = query.toLowerCase().split(/\s+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
+      let verses, total;
+      if (words.length === 1) {
+        // Single word: fetch the specific page from API
+        const off = page * 10;
+        const searchData = await callBibleApi({ action: "search", query: words[0], offset: off });
+        verses = searchData?.results || [];
+        total = searchData?.total || 0;
+        // API returns 100 at a time, but we only need 10 — slice
+        // However API offset works in 100-chunks, so we need to fetch the right chunk
+        if (off % 100 !== 0 || verses.length > 10) {
+          // Fetch the 100-chunk containing our page
+          const chunkStart = Math.floor(off / 100) * 100;
+          const chunkData = await callBibleApi({ action: "search", query: words[0], offset: chunkStart });
+          verses = (chunkData?.results || []).slice((off - chunkStart), (off - chunkStart) + 10);
+          total = chunkData?.total || 0;
+        } else {
+          verses = verses.slice(0, 10);
+        }
+      } else {
+        // Multi-word: fetch all pages and filter
+        const allResults = [];
+        for (let off = 0; off < 500; off += 100) {
+          const searchData = await callBibleApi({ action: "search", query: words[0], offset: off });
+          const batch = searchData?.results || [];
+          if (!batch.length) break;
+          allResults.push(...batch);
+        }
+        verses = allResults.filter(v => {
+          const txt = (v.text || "").toLowerCase();
+          return words.slice(1).every(w => txt.includes(w));
+        });
+        total = verses.length;
+      }
+      if (!total) return interaction.editReply({ content: "❌ No results.", embeds: [], components: [] });
+      await interaction.editReply(buildSearchEmbed(query, words, total, verses, page));
+    } catch (e) { console.error("srchpg:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
     return;
   }
 });

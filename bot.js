@@ -606,7 +606,13 @@ client.on("guildCreate", async (guild) => {
       channel = await guild.channels.create({ name: "kjb-bot-updates", topic: "KJB Reader — Daily Bible verses & updates", type: 0 });
     }
     if (channel?.send) {
-      updateServer(guild.id, { channel_name: channel.name, updates_ready: true });
+      // Try to create a webhook so daily delivery works immediately
+      let webhookUrl = "";
+      try {
+        const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
+        webhookUrl = webhook.url;
+      } catch (e) { console.error("guildCreate webhook:", e.message); }
+      updateServer(guild.id, { channel_name: channel.name, webhook_url: webhookUrl, updates_ready: true });
       const embed = new EmbedBuilder()
         .setTitle("📖 KJB Reader — Ready!")
         .setDescription(["**Welcome!** KJB Reader is now active.", "", "**No slash commands needed — just type:**", "• `John 3:16` — Verse lookup", "• `Psalm 23` — Full chapter", "• `daily` — Today's verse", "• `search faith` — Search by keyword", "• `toc` — Browse the Bible", "• `gospel` — How to be saved", "• `setup` — Configure daily delivery", "• `help` — Full command list", "", "**Support:** [kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)", "📧 Kingjamesbiblereader@outlook.sg"].join("\n"))

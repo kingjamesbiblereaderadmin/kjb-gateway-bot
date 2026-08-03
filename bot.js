@@ -237,6 +237,25 @@ async function callBibleApi(payload) {
 // ============ EMBED BUILDERS ============
 
 // Verse embed — matches V3: Prev Vs / Next Vs + Read Chapter + TOC + Copy
+// Resolve a ref that may include a dash-range (e.g. "John 3:16-18") into a
+// full array of verse objects — the bibleApi's resolve_refs does NOT support
+// dash ranges natively, so ranges must be expanded into individual fetches.
+async function resolveRefRange(ref) {
+  const parsed = parseRef(ref);
+  if (parsed && parsed.verseStart && parsed.verseEnd) {
+    const verses = [];
+    for (let v = parsed.verseStart; v <= parsed.verseEnd; v++) {
+      try {
+        const d = await callBibleApi({ action: "resolve_refs", refs: [`${parsed.book} ${parsed.chapter}:${v}`] });
+        if (d?.verses?.[0]) verses.push(d.verses[0]);
+      } catch (e) { console.error("resolveRefRange verse fetch failed:", e.message); }
+    }
+    return verses;
+  }
+  const d = await callBibleApi({ action: "resolve_refs", refs: [ref] });
+  return d?.verses || [];
+}
+
 function isValidVerse(v) {
   return v && v.text != null && v.book != null && v.chapter != null && v.verse != null;
 }
@@ -330,17 +349,17 @@ function buildVerseEmbed(verses) {
       new ButtonBuilder().setCustomId(`copyref|${shortRef}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel("📋 Copy"),
     ));
   } else {
-    // Multi-ref: grouped Copy buttons (one per range/group) + TOC
-    // Row 1: TOC + up to 4 group Copy buttons
+    // Multi-ref: grouped "open verse" buttons (one per range/group) + TOC
+    // Row 1: TOC + up to 4 group buttons
     const groupButtons = groups.slice(0, 4).map(g => {
       const gFirst = g[0], gLast = g[g.length - 1];
       const ref = g.length === 1
         ? `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
         : `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
       const label = g.length === 1
-        ? `📋 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
-        : `📋 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
-      return new ButtonBuilder().setCustomId(`copyref|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
+        ? `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
+        : `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
+      return new ButtonBuilder().setCustomId(`openverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
     });
     rows.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
@@ -355,9 +374,9 @@ function buildVerseEmbed(verses) {
           ? `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
           : `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
         const label = g.length === 1
-          ? `📋 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
-          : `📋 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
-        return new ButtonBuilder().setCustomId(`copyref|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
+          ? `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
+          : `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
+        return new ButtonBuilder().setCustomId(`openverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
       });
       rows.push(new ActionRowBuilder().addComponents(...groupButtons2));
     }
@@ -1580,9 +1599,8 @@ client.on("interactionCreate", async (interaction) => {
         copyText = `${chapterOnly[1].trim()} ${chapterOnly[2]} (KJB)\n` + verses.map(v => `[${v.verse}] ${stripMd(v.text)}`).join("\n");
         if (d.colophon) copyText += `\n¶ ${stripMd(d.colophon)}`;
       } else {
-        const d = await callBibleApi({ action: "resolve_refs", refs: [ref] });
-        const verses = d?.verses || [];
-        if (!verses.length || verses[0]?.text == null) return interaction.reply({ content: "❌ Verse not found.", flags: 64 });
+        const verses = (await resolveRefRange(ref)).filter(isValidVerse);
+        if (!verses.length) return interaction.reply({ content: "❌ Verse not found.", flags: 64 });
         const first = verses[0], last = verses[verses.length - 1];
         const refLabel = verses.length > 1 ? `${first.book} ${first.chapter}:${first.verse}-${last.verse}` : `${first.book} ${first.chapter}:${first.verse}`;
         copyText = `${refLabel} (KJB) — ` + verses.map(v => stripMd(v.text)).join(" ");
@@ -1730,12 +1748,11 @@ client.on("interactionCreate", async (interaction) => {
     return;
   }
 
-  // Open verse from search results
+  // Open verse from search results / multi-ref group buttons
   if (customId.startsWith("openverse|")) {
     const ref = customId.slice("openverse|".length);
     try {
-      const d = await callBibleApi({ action: "resolve_refs", refs: [ref] });
-      const verses = d?.verses || [];
+      const verses = (await resolveRefRange(ref)).filter(isValidVerse);
       if (verses.length) {
         await interaction.reply({ ...buildVerseEmbed(verses), flags: 64 });
       } else {

@@ -487,20 +487,62 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // Try to parse as Bible reference
+  // Try to parse as Bible reference(s) — supports comma/semicolon separated multi-ref
   let refText = text;
+  
+  // Check for multiple references separated by commas or semicolons
+  // e.g. "John 3:16, Romans 5:8" or "John 3:16; Romans 5:8; Rev 3:20"
+  const multiRefPattern = /\b((?:[123]\s)?[A-Za-z]{2,}(?:\s[A-Za-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?\b/g;
+  const allMatches = [...content.matchAll(multiRefPattern)].filter(m => {
+    const book = resolveBook(m[1]);
+    return book && KJV_BOOKS[book] && parseInt(m[2]) >= 1 && parseInt(m[2]) <= KJV_BOOKS[book];
+  });
+
+  if (allMatches.length > 1) {
+    // Multiple verse references — fetch all and show in one embed
+    if (!isMention && content.length > 150) return;
+    try {
+      const allVerses = [];
+      for (const m of allMatches) {
+        const book = resolveBook(m[1]);
+        const chapter = parseInt(m[2]);
+        const vsStart = parseInt(m[3]);
+        const vsEnd = m[4] ? parseInt(m[4]) : null;
+        if (vsEnd) {
+          for (let v = vsStart; v <= vsEnd; v++) {
+            const d = await callBibleApi({ action: "resolve_refs", refs: [`${book} ${chapter}:${v}`] });
+            if (d?.verses?.[0]) allVerses.push(d.verses[0]);
+          }
+        } else {
+          const d = await callBibleApi({ action: "resolve_refs", refs: [`${book} ${chapter}:${vsStart}`] });
+          if (d?.verses?.[0]) allVerses.push(d.verses[0]);
+        }
+      }
+      if (allVerses.length) {
+        await message.reply(buildVerseEmbed(allVerses));
+      } else {
+        if (isMention) await message.reply({ content: "❌ Verses not found.", allowedMentions: { repliedUser: false } });
+      }
+    } catch (e) {
+      console.error("multi-ref:", e.message);
+      if (isMention) await message.reply({ content: "❌ Something went wrong.", allowedMentions: { repliedUser: false } });
+    }
+    return;
+  }
+
   const parsed = parseRef(refText);
 
-  // Also try matching a reference anywhere in the message (inline detection)
+  // Also try matching a single reference anywhere in the message (inline detection)
   let inlineRef = null;
   if (!parsed) {
-    const inlineMatch = content.match(/\b((?:[123]\s)?[A-Za-z]{2,}(?:\s[A-Za-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?\b/);
+    const inlineMatch = content.match(multiRefPattern);
     if (inlineMatch) {
-      const book = resolveBook(inlineMatch[1]);
+      const m = inlineMatch[0];
+      const book = resolveBook(m[1] || m);
       if (book) {
-        const chapter = parseInt(inlineMatch[2]);
+        const chapter = parseInt(m[2]);
         if (KJV_BOOKS[book] && chapter >= 1 && chapter <= KJV_BOOKS[book]) {
-          inlineRef = { book, chapter, verseStart: parseInt(inlineMatch[3]), verseEnd: inlineMatch[4] ? parseInt(inlineMatch[4]) : null };
+          inlineRef = { book, chapter, verseStart: parseInt(m[3]), verseEnd: m[4] ? parseInt(m[4]) : null };
         }
       }
     }

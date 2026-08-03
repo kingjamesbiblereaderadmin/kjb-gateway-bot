@@ -1282,18 +1282,22 @@ client.on("messageCreate", async (message) => {
     try {
       const allVerses = [];
       for (const m of allMatches) {
-        const book = resolveBook(m[1]);
-        const chapter = parseInt(m[2]);
-        const vsStart = parseInt(m[3]);
-        const vsEnd = m[4] ? parseInt(m[4]) : null;
-        if (vsEnd) {
-          for (let v = vsStart; v <= vsEnd; v++) {
-            const d = await callBibleApi({ action: "resolve_refs", refs: [`${book} ${chapter}:${v}`] });
+        try {
+          const book = resolveBook(m[1]);
+          const chapter = parseInt(m[2]);
+          const vsStart = parseInt(m[3]);
+          const vsEnd = m[4] ? parseInt(m[4]) : null;
+          if (vsEnd) {
+            for (let v = vsStart; v <= vsEnd; v++) {
+              const d = await callBibleApi({ action: "resolve_refs", refs: [`${book} ${chapter}:${v}`] });
+              if (d?.verses?.[0]) allVerses.push(d.verses[0]);
+            }
+          } else {
+            const d = await callBibleApi({ action: "resolve_refs", refs: [`${book} ${chapter}:${vsStart}`] });
             if (d?.verses?.[0]) allVerses.push(d.verses[0]);
           }
-        } else {
-          const d = await callBibleApi({ action: "resolve_refs", refs: [`${book} ${chapter}:${vsStart}`] });
-          if (d?.verses?.[0]) allVerses.push(d.verses[0]);
+        } catch (verseErr) {
+          console.error("multi-ref verse fetch failed:", verseErr.message);
         }
       }
       // Deduplicate by ref, preserve user input order
@@ -1313,7 +1317,7 @@ client.on("messageCreate", async (message) => {
       }
     } catch (e) {
       console.error("multi-ref:", e.message);
-      if (isMention) await message.reply({ content: "❌ Something went wrong.", allowedMentions: { repliedUser: false } });
+      await message.reply({ content: "❌ Something went wrong looking up those verses.", allowedMentions: { repliedUser: false } });
     }
     return;
   }
@@ -1365,12 +1369,12 @@ client.on("messageCreate", async (message) => {
       if (data?.verses?.length) {
         await message.reply(buildChapterEmbed(ref.book, ref.chapter, data.verses, data.colophon, data.bookFullName));
       } else {
-        if (isMention) await message.reply({ content: `❌ ${ref.book} ${ref.chapter} not found.`, allowedMentions: { repliedUser: false } });
+        await message.reply({ content: `❌ ${ref.book} ${ref.chapter} not found.`, allowedMentions: { repliedUser: false } });
       }
     }
   } catch (e) {
     console.error("ref lookup:", e.message);
-    if (isMention) await message.reply({ content: "❌ Something went wrong. Try again!", allowedMentions: { repliedUser: false } });
+    await message.reply({ content: "❌ Something went wrong. Try again!", allowedMentions: { repliedUser: false } });
   }
   } catch (e) {
     console.error("messageCreate error:", e?.message || e);

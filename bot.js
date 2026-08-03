@@ -305,7 +305,7 @@ client.on("messageCreate", async (message) => {
     const query = text.replace(/^search\s+/i, "").trim();
     if (!query) return;
     try {
-      const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const words = query.toLowerCase().split(/\s+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
       // API only supports single-word search — search first word, filter rest client-side
       const searchData = await callBibleApi({ action: "search", query: words[0] });
       let results = searchData?.results || [];

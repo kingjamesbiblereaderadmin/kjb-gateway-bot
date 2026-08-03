@@ -216,27 +216,33 @@ async function callBibleApi(payload) {
 // ============ EMBED BUILDERS ============
 
 // Verse embed — matches V3: Prev Vs / Next Vs + Read Chapter + TOC + Copy
+function isValidVerse(v) {
+  return v && v.text != null && v.book != null && v.chapter != null && v.verse != null;
+}
+
 function buildVerseEmbed(verses) {
-  const first = verses[0], last = verses[verses.length - 1];
+  const valid = valid.filter(isValidVerse);
+  if (!valid.length) return { embeds: [], components: [] };
+  const first = valid[0], last = valid[valid.length - 1];
   const fullTitle = KJV_FULL_TITLES[first.book] || first.book;
   
   // Check if verses span multiple books or chapters
-  const sameBook = verses.every(v => v.book === first.book);
-  const sameChapter = sameBook && verses.every(v => v.chapter === first.chapter);
+  const sameBook = valid.every(v => v.book === first.book);
+  const sameChapter = sameBook && valid.every(v => v.chapter === first.chapter);
   const isMultiRef = !sameChapter; // different books or different chapters
   
   let title, desc;
   
-  if (sameBook && sameChapter && verses.length > 1) {
+  if (sameBook && sameChapter && valid.length > 1) {
     // Dash range in same chapter (e.g., John 3:16-18) — show verses TOGETHER
     title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
     desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
     desc += verses.map(v => `**[${v.verse}]** ${formatKJV(v.text)}`).join("\n\n");
-  } else if (verses.length === 1) {
+  } else if (valid.length === 1) {
     // Single verse
     title = `${fullTitle} — ${first.chapter}:${first.verse}`;
     desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
-    desc += `"${formatKJV(verses[0].text)}"`;
+    desc += `"${formatKJV(valid[0].text)}"`;
   } else if (sameBook && !sameChapter) {
     // Same book, different chapters
     title = fullTitle;
@@ -246,9 +252,9 @@ function buildVerseEmbed(verses) {
     title = "Multiple Verses";
     // Group contiguous verses (same book + chapter, sequential verse numbers)
     const groups = [];
-    let curGroup = [verses[0]];
-    for (let i = 1; i < verses.length; i++) {
-      const prev = verses[i - 1], curr = verses[i];
+    let curGroup = [valid[0]];
+    for (let i = 1; i < valid.length; i++) {
+      const prev = valid[i - 1], curr = valid[i];
       if (prev.book === curr.book && prev.chapter === curr.chapter && curr.verse === prev.verse + 1) {
         curGroup.push(curr);
       } else {
@@ -282,7 +288,7 @@ function buildVerseEmbed(verses) {
 
   if (!isMultiRef) {
     // Single verse or dash range: keep Prev/Next + Read Chapter + TOC + Copy
-    const shortRef = verses.length > 1 
+    const shortRef = valid.length > 1 
       ? `${first.book} ${first.chapter}:${first.verse}-${last.verse}` 
       : `${first.book} ${first.chapter}:${first.verse}`;
     
@@ -1299,10 +1305,11 @@ client.on("messageCreate", async (message) => {
         return true;
       });
       
-      if (deduped.length) {
-        await message.reply(buildVerseEmbed(deduped));
+      const validDeduped = deduped.filter(isValidVerse);
+      if (validDeduped.length) {
+        await message.reply(buildVerseEmbed(validDeduped));
       } else {
-        if (isMention) await message.reply({ content: "❌ Verses not found.", allowedMentions: { repliedUser: false } });
+        await message.reply({ content: "❌ Verses not found.", allowedMentions: { repliedUser: false } });
       }
     } catch (e) {
       console.error("multi-ref:", e.message);
@@ -1345,11 +1352,11 @@ client.on("messageCreate", async (message) => {
         refs.push(`${ref.book} ${ref.chapter}:${ref.verseStart}`);
       }
       const results = await Promise.all(refs.map(r => callBibleApi({ action: "resolve_refs", refs: [r] }).then(d => d?.verses?.[0]).catch(() => null)));
-      const verses = results.filter(Boolean);
+      const verses = results.filter(isValidVerse);
       if (verses.length) {
         await message.reply(buildVerseEmbed(verses));
       } else {
-        if (isMention) await message.reply({ content: `❌ "${refText}" not found in the KJB.`, allowedMentions: { repliedUser: false } });
+        await message.reply({ content: `❌ "${refText}" not found in the KJB.`, allowedMentions: { repliedUser: false } });
       }
     }
     // Chapter lookup

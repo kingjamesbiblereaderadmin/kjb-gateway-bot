@@ -154,23 +154,23 @@ const ALIASES = { "gen":"Genesis","ge":"Genesis","gn":"Genesis","exo":"Exodus","
 const GOSPEL_PAGES = [
   {
     title: "✝️ HOW TO BE SAVED — Page 1/6",
-    desc: "**The Gospel is the glad tidings of the Lord Jesus Christ:**\n\nTrust he is God, died, shed his blood, buried and rose again on the third day for our sins according to the scriptures.\n\n**1. Believe you are a sinner that deserves hell:**\n\n\"Therefore by the deeds of the law there shall no flesh be justified in his sight: for by the law is the knowledge of sin.\"\n— [Romans 3:20](https://kingjamesbiblereader.com/read?book=Rom&chapter=3&verse=20&from=gospel)\n\n\"The wicked shall be turned into hell, and all the nations that forget God.\"\n— [Psalm 9:17](https://kingjamesbiblereader.com/read?book=Psa&chapter=9&verse=17&from=gospel)"
+    desc: "**The Gospel is the glad tidings of the Lord Jesus Christ:**\nTrust he is God, died, shed his blood, buried and rose again on the third day for our sins according to the scriptures.\n\n**1. Believe you are a sinner that deserves hell:**\n\"Therefore by the deeds of the law there shall no flesh be justified in his sight: for by the law is the knowledge of sin.\"\n— [Romans 3:20](https://kingjamesbiblereader.com/read?book=Rom&chapter=3&verse=20&from=gospel)\n\n\"The wicked shall be turned into hell, and all the nations that forget God.\"\n— [Psalm 9:17](https://kingjamesbiblereader.com/read?book=Psa&chapter=9&verse=17&from=gospel)"
   },
   {
     title: "✝️ HOW TO BE SAVED — Page 2/6",
-    desc: "**2. Believe that Jesus is God manifested in the flesh:**\n\n\"And without controversy great is the mystery of godliness: God was manifest in the flesh, justified in the Spirit, seen of angels, preached unto the Gentiles, believed on in the world, received up into glory.\"\n— [1 Timothy 3:16](https://kingjamesbiblereader.com/read?book=1Tim&chapter=3&verse=16&from=gospel)"
+    desc: "**2. Believe that Jesus is God manifested in the flesh:**\n\"And without controversy great is the mystery of godliness: God was manifest in the flesh, justified in the Spirit, seen of angels, preached unto the Gentiles, believed on in the world, received up into glory.\"\n— [1 Timothy 3:16](https://kingjamesbiblereader.com/read?book=1Tim&chapter=3&verse=16&from=gospel)"
   },
   {
     title: "✝️ HOW TO BE SAVED — Page 3/6",
-    desc: "**3. Believe he died, shed his blood, was buried and rose again for our sins according to the scriptures:**\n\n\"Moreover, brethren, I declare unto you the gospel which I preached unto you, which also ye have received, and wherein ye stand; By which also ye are saved, if ye keep in memory what I preached unto you, unless ye have believed in vain. For I delivered unto you first of all that which I also received, how that Christ died for our sins according to the scriptures; And that he was buried, and that he rose again the third day according to the scriptures.\"\n— [1 Corinthians 15:1-4](https://kingjamesbiblereader.com/read?book=1Cor&chapter=15&verse=1&from=gospel)\n\n\"Whom God hath set forth to be a propitiation through faith in his blood, to declare his righteousness for the remission of sins that are past, through the forbearance of God;\"\n— [Romans 3:25](https://kingjamesbiblereader.com/read?book=Rom&chapter=3&verse=25&from=gospel)"
+    desc: "**3. Believe he died, shed his blood, was buried and rose again for our sins according to the scriptures:**\n\"Moreover, brethren, I declare unto you the gospel which I preached unto you, which also ye have received, and wherein ye stand; By which also ye are saved, if ye keep in memory what I preached unto you, unless ye have believed in vain. For I delivered unto you first of all that which I also received, how that Christ died for our sins according to the scriptures; And that he was buried, and that he rose again the third day according to the scriptures.\"\n— [1 Corinthians 15:1-4](https://kingjamesbiblereader.com/read?book=1Cor&chapter=15&verse=1&from=gospel)\n\n\"Whom God hath set forth to be a propitiation through faith in his blood, to declare his righteousness for the remission of sins that are past, through the forbearance of God;\"\n— [Romans 3:25](https://kingjamesbiblereader.com/read?book=Rom&chapter=3&verse=25&from=gospel)"
   },
   {
     title: "✝️ HOW TO BE SAVED — Page 4/6",
-    desc: "**These do NOT make you a Christian:**\n\n• Repenting of sins\n• Making Jesus Lord\n• Being a member of a church\n• Tithing\n• Being baptised (water)\n• Saying a sinner's prayer\n• Confessing with your mouth\n• Lordship Salvation"
+    desc: "**These do NOT make you a Christian:**\n• Repenting of sins\n• Making Jesus Lord\n• Being a member of a church\n• Tithing\n• Being baptised (water)\n• Saying a sinner's prayer\n• Confessing with your mouth\n• Lordship Salvation"
   },
   {
     title: "✝️ HOW TO BE SAVED — Page 5/6",
-    desc: "**Once Saved, Always Saved:**\n\nA believer who has trusted the gospel cannot lose salvation, no matter what happens in their life. God's gift of eternal life is just that — eternal.\n\n\"In whom ye also trusted, after that ye heard the word of truth, the gospel of your salvation: in whom also after that ye believed, ye were sealed with that holy Spirit of promise.\"\n— [Ephesians 1:13](https://kingjamesbiblereader.com/read?book=Eph&chapter=1&verse=13&from=gospel)"
+    desc: "**Once Saved, Always Saved:**\nA believer who has trusted the gospel cannot lose salvation, no matter what happens in their life. God's gift of eternal life is just that — eternal.\n\n\"In whom ye also trusted, after that ye heard the word of truth, the gospel of your salvation: in whom also after that ye believed, ye were sealed with that holy Spirit of promise.\"\n— [Ephesians 1:13](https://kingjamesbiblereader.com/read?book=Eph&chapter=1&verse=13&from=gospel)"
   },
   {
     title: "✝️ HOW TO BE SAVED — Page 6/6",
@@ -572,6 +572,9 @@ function buildGospelEmbed(page = 0) {
       new ButtonBuilder().setCustomId(`gospel|${page + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next ▶").setDisabled(page >= GOSPEL_PAGES.length - 1),
     ));
   }
+  rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
+  ));
   return { embeds: [embed], components: rows };
 }
 

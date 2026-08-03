@@ -1013,6 +1013,112 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
+  // Fix — repair webhook + deliver today's verse immediately
+  if (isShort && /^fix\s*$/i.test(text) && message.guild) {
+    if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild)) return;
+    const server = getServer(message.guild.id);
+    if (!server) {
+      await message.reply({ content: "\u274C No configuration found. Type `setup` to get started.", allowedMentions: { repliedUser: false } });
+      return;
+    }
+
+    await message.reply({ content: "\u2699\uFE0F Running fix...", allowedMentions: { repliedUser: false } });
+
+    // 1. Repair webhook — find or create #daily-verse channel + webhook
+    let webhookUrl = server.webhook_url;
+    let channelName = server.channel_name;
+    try {
+      // Test if existing webhook still works
+      if (webhookUrl) {
+        const testRes = await fetch(webhookUrl, { method: "GET" });
+        if (testRes.status === 404 || testRes.status === 410) {
+          webhookUrl = ""; // Dead, need to recreate
+        }
+      }
+
+      if (!webhookUrl) {
+        // Find or create #daily-verse channel
+        const { channel } = await ensureDailyVerseChannel(message.guild);
+        if (channel?.createWebhook) {
+          const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
+          webhookUrl = webhook.url;
+          channelName = channel.name;
+          updateServer(message.guild.id, { webhook_url: webhookUrl, channel_name: channelName, active: true });
+        }
+      } else {
+        // Patch avatar on existing webhook
+        await patchWebhookAvatar(webhookUrl);
+      }
+    } catch (e) { console.error("fix webhook repair:", e.message); }
+
+    // 2. Deliver today's verse immediately
+    try {
+      const now = new Date();
+      const data = await callBibleApi({ action: "daily_verse", clientDate: `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}` });
+      const v = data?.verse || data;
+      if (v?.text) {
+        const fullRef = v.bookFullName ? `${v.bookFullName} — ${v.chapter}:${v.verse}` : `${v.book} ${v.chapter}:${v.verse}`;
+        const formattedDate = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+        const verseText = formatKJV(v.text);
+        const verseSup = v.superscription ? formatKJV(v.superscription) : "";
+        const shortRef = `${v.book} ${v.chapter}:${v.verse}`;
+        const prevDis = (v.book === "Genesis" && v.chapter === 1 && v.verse === 1);
+        const components = [
+          { type: 1, components: [
+            { type: 2, style: 2, label: "\u25C0 Prev Vs", custom_id: `prevvs|${v.book}||${v.chapter}||${v.verse}`, disabled: prevDis },
+            { type: 2, style: 2, label: "Next Vs \u25B6", custom_id: `nextvs|${v.book}||${v.chapter}||${v.verse}` },
+          ]},
+          { type: 1, components: [
+            { type: 2, style: 2, label: "\uD83D\uDCD6 Read Chapter", custom_id: `dv|${v.book}||${v.chapter}||${v.verse}` },
+            { type: 2, style: 2, label: "\uD83D\uDCD6 TOC", custom_id: `bibletoc|0` },
+            { type: 2, style: 2, label: "\uD83D\uDCCB Copy", custom_id: `copyref|${shortRef}`.slice(0, 100) },
+          ]},
+        ];
+        const verseEmbed = {
+          title: `\uD83D\uDCD6 Daily Verse — ${formattedDate}`,
+          description: `${verseSup ? `*${verseSup}*\n\n` : ""}**${fullRef}**\n\n> "${verseText}"`,
+          color: 0xC8922E,
+          thumbnail: { url: KJB_LOGO },
+          footer: { text: "KJB Reader • kingjamesbiblereader.com" },
+        };
+
+        // Send via webhook (silent, no ping)
+        if (webhookUrl) {
+          await patchWebhookAvatar(webhookUrl);
+          await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ embeds: [verseEmbed], components, allowed_mentions: { parse: [] } }),
+          });
+        } else {
+          // Fallback: send in channel
+          await message.channel.send({ embeds: [verseEmbed], components, allowedMentions: { parse: [] } });
+        }
+
+        const fixResult = new EmbedBuilder()
+          .setAuthor({ name: "KJB Reader", iconURL: KJB_LOGO })
+          .setTitle("\u2705 Fix Complete")
+          .setDescription([
+            "**Webhook:** " + (webhookUrl ? "\u2705 Repaired" : "\u274C Could not repair"),
+            "**Daily Verse:** \u2705 Delivered to #" + (channelName || "daily-verse"),
+            "**Ping:** Silent (fix never pings)",
+            "",
+            "Type `status` to verify, `setup` to reconfigure.",
+          ].join("\n"))
+          .setColor(0xC8922E)
+          .setThumbnail(KJB_LOGO)
+          .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+        await message.reply({ embeds: [fixResult], allowedMentions: { repliedUser: false } });
+      } else {
+        await message.reply({ content: "\u274C Could not fetch today's verse. Please try again later.", allowedMentions: { repliedUser: false } });
+      }
+    } catch (e) {
+      console.error("fix delivery:", e.message);
+      await message.reply({ content: "\u274C Fix failed: " + e.message, allowedMentions: { repliedUser: false } });
+    }
+    return;
+  }
+
   // Try to parse as Bible reference(s) — supports comma/semicolon separated multi-ref
   let refText = text;
   

@@ -747,7 +747,7 @@ function buildSetupEmbed(guildId) {
   const roleRow = new ActionRowBuilder().addComponents(
     new RoleSelectMenuBuilder()
       .setCustomId("setup_role")
-      .setPlaceholder("Ping role: " + roleLabel)
+      .setPlaceholder("Ping role: " + (server.role_id ? "Custom" : "@everyone"))
   );
 
   const tzRow = new ActionRowBuilder().addComponents(
@@ -761,45 +761,39 @@ function buildSetupEmbed(guildId) {
       })))
   );
 
-  const timeRow1 = new ActionRowBuilder().addComponents(
-    [0, 1, 2, 3, 4, 5].map(hr =>
-      new ButtonBuilder()
-        .setCustomId("setup_time||" + hr)
-        .setLabel(hr + ":00")
-        .setStyle(h === hr ? ButtonStyle.Primary : ButtonStyle.Secondary)
-    )
+  // Time as dropdown — 24 options in one row instead of 24 buttons in 4 rows
+  const timeRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("setup_time")
+      .setPlaceholder("Delivery time: " + h + ":00 UTC")
+      .addOptions(Array.from({ length: 24 }, (_, hr) => ({
+        label: hr + ":00 UTC",
+        value: String(hr),
+        default: h === hr,
+      })))
   );
 
-  const timeRow2 = new ActionRowBuilder().addComponents(
-    [6, 7, 8, 9, 10, 11].map(hr =>
-      new ButtonBuilder()
-        .setCustomId("setup_time||" + hr)
-        .setLabel(hr + ":00")
-        .setStyle(h === hr ? ButtonStyle.Primary : ButtonStyle.Secondary)
-    )
-  );
-
-  const timeRow3 = new ActionRowBuilder().addComponents(
-    [12, 13, 14, 15, 16, 17].map(hr =>
-      new ButtonBuilder()
-        .setCustomId("setup_time||" + hr)
-        .setLabel(hr + ":00")
-        .setStyle(h === hr ? ButtonStyle.Primary : ButtonStyle.Secondary)
-    )
-  );
-
-  const timeRow4 = new ActionRowBuilder().addComponents(
-    [18, 19, 20, 21, 22, 23].map(hr =>
-      new ButtonBuilder()
-        .setCustomId("setup_time||" + hr)
-        .setLabel(hr + ":00")
-        .setStyle(h === hr ? ButtonStyle.Primary : ButtonStyle.Secondary)
-    )
+  // Enable/Disable buttons
+  const toggleRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("setup_enable")
+      .setLabel("Enable")
+      .setStyle(server.active ? ButtonStyle.Success : ButtonStyle.Secondary)
+      .setDisabled(server.active),
+    new ButtonBuilder()
+      .setCustomId("setup_disable")
+      .setLabel("Disable")
+      .setStyle(!server.active ? ButtonStyle.Danger : ButtonStyle.Secondary)
+      .setDisabled(!server.active),
+    new ButtonBuilder()
+      .setCustomId("setup_fix")
+      .setLabel("🔧 Fix Webhook")
+      .setStyle(ButtonStyle.Secondary)
   );
 
   return {
     embeds: [embed],
-    components: [channelRow, roleRow, tzRow, timeRow1, timeRow2, timeRow3, timeRow4],
+    components: [channelRow, roleRow, tzRow, timeRow, toggleRow],
     allowedMentions: { parse: [] },
   };
 }
@@ -1348,7 +1342,16 @@ client.on("interactionCreate", async (interaction) => {
       const tz = interaction.values[0];
       updateServer(interaction.guild.id, { timezone: tz });
       await interaction.update(buildSetupEmbed(interaction.guild.id));
-      await interaction.followUp({ content: `✅ Timezone set to **${tz}**.`, flags: 64 });
+      await interaction.followUp({ content: `\u2705 Timezone set to **${tz}**.`, flags: 64 });
+      return;
+    }
+
+    if (id === "setup_time") {
+      const hr = parseInt(interaction.values[0]);
+      if (isNaN(hr) || hr < 0 || hr > 23) return;
+      updateServer(interaction.guild.id, { verse_time: String(hr).padStart(2, "0") + ":00" });
+      await interaction.update(buildSetupEmbed(interaction.guild.id));
+      await interaction.followUp({ content: "\u2705 Delivery time set to **" + hr + ":00 UTC**.", flags: 64 });
       return;
     }
     
@@ -1356,11 +1359,53 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // Handle setup time buttons
-  if (interaction.isButton() && interaction.customId.startsWith("setup_time||")) {
-    const hr = parseInt(interaction.customId.split("||")[1]);
-    if (isNaN(hr) || hr < 0 || hr > 23) return;
-    updateServer(interaction.guild.id, { verse_time: `${String(hr).padStart(2, "0")}:00` });
+  if (interaction.isButton() && interaction.customId === "setup_enable") {
+    updateServer(interaction.guild.id, { active: true });
     await interaction.update(buildSetupEmbed(interaction.guild.id));
+    await interaction.followUp({ content: "\u2705 Daily verse delivery **enabled**.", flags: 64 });
+    return;
+  }
+
+  if (interaction.isButton() && interaction.customId === "setup_disable") {
+    updateServer(interaction.guild.id, { active: false });
+    await interaction.update(buildSetupEmbed(interaction.guild.id));
+    await interaction.followUp({ content: "\u2705 Daily verse delivery **disabled**.", flags: 64 });
+    return;
+  }
+
+  if (interaction.isButton() && interaction.customId === "setup_fix") {
+    await interaction.deferReply({ flags: 64 });
+    const server = getServer(interaction.guild.id) || {};
+    let webhookUrl = server.webhook_url;
+    let channelName = server.channel_name;
+    const steps = [];
+    try {
+      if (webhookUrl) {
+        const testRes = await fetch(webhookUrl, { method: "GET" });
+        if (testRes.status === 404 || testRes.status === 410) {
+          webhookUrl = "";
+          steps.push("\u26A0\uFE0F Existing webhook was dead");
+        } else {
+          await patchWebhookAvatar(webhookUrl);
+          steps.push("\u2705 Webhook OK (avatar patched)");
+        }
+      }
+      if (!webhookUrl) {
+        const { channel } = await ensureDailyVerseChannel(interaction.guild);
+        if (channel?.createWebhook) {
+          const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
+          webhookUrl = webhook.url;
+          channelName = channel.name;
+          updateServer(interaction.guild.id, { webhook_url: webhookUrl, channel_name: channelName, active: true });
+          steps.push("\u2705 New webhook created in #" + channelName);
+        }
+      }
+    } catch (e) {
+      steps.push("\u274C Webhook repair failed: " + e.message);
+    }
+    updateServer(interaction.guild.id, { last_sent_date: "" });
+    steps.push("\u2705 Delivery schedule reset");
+    await interaction.editReply({ content: steps.join("\n"), flags: 64 });
     return;
   }
 

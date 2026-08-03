@@ -221,7 +221,7 @@ function isValidVerse(v) {
 }
 
 function buildVerseEmbed(verses) {
-  const valid = valid.filter(isValidVerse);
+  const valid = verses.filter(isValidVerse);
   if (!valid.length) return { embeds: [], components: [] };
   const first = valid[0], last = valid[valid.length - 1];
   const fullTitle = KJV_FULL_TITLES[first.book] || first.book;

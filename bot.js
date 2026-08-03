@@ -840,6 +840,7 @@ function buildSetupEmbed(guildId) {
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
+  try {
   const content = message.content;
   const isMention = message.mentions.users.has(client.user.id);
   const cleaned = content.replace(/<@!?\d+>/g, "").trim();
@@ -1343,11 +1344,16 @@ client.on("messageCreate", async (message) => {
     console.error("ref lookup:", e.message);
     if (isMention) await message.reply({ content: "❌ Something went wrong. Try again!", allowedMentions: { repliedUser: false } });
   }
+  } catch (e) {
+    console.error("messageCreate error:", e?.message || e);
+    try { await message.reply({ content: "❌ Something went wrong. Try again!", allowedMentions: { repliedUser: false } }); } catch {}
+  }
 });
 
 // ============ BUTTON HANDLERS ============
 
 client.on("interactionCreate", async (interaction) => {
+  try {
   // Handle select menus (setup)
   if (interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
     const id = interaction.customId;
@@ -1773,6 +1779,10 @@ client.on("interactionCreate", async (interaction) => {
       await interaction.editReply(buildSearchEmbed(query, words, total, verses, page));
     } catch (e) { console.error("srchpg:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
     return;
+  }
+  } catch (e) {
+    console.error("interactionCreate error:", e?.message || e);
+    try { if (!interaction.deferred && !interaction.replied) await interaction.reply({ content: "❌ Something went wrong.", flags: 64 }); } catch {}
   }
 });
 

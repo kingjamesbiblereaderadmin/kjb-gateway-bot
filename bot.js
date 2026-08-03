@@ -950,6 +950,120 @@ client.on("messageCreate", async (message) => {
   }
 
   // Setup command — interactive configuration with Discord components
+  // ── Setup subcommands ──────────────────────────────────────────────────────
+  if (isShort && /^setup\s+/i.test(text) && message.guild) {
+    if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild)) {
+      await message.reply({ content: "❌ You need **Manage Server** permission to use setup.", allowedMentions: { repliedUser: false } });
+      return;
+    }
+
+    const sub = text.replace(/^setup\s+/i, "").trim();
+    const server = getServer(message.guild.id) || {};
+
+    // setup channel — show interactive panel (channel select)
+    if (/^channel\s*$/i.test(sub)) {
+      await message.reply(buildSetupEmbed(message.guild.id));
+      return;
+    }
+
+    // setup time <hour> — set delivery hour directly
+    if (/^time\s+(\d{1,2})$/i.test(sub)) {
+      const hr = parseInt(sub.match(/^time\s+(\d{1,2})$/i)[1]);
+      if (isNaN(hr) || hr < 0 || hr > 23) {
+        await message.reply({ content: "❌ Time must be 0-23 (UTC). Example: `setup time 8`", allowedMentions: { repliedUser: false } });
+        return;
+      }
+      updateServer(message.guild.id, { verse_time: String(hr).padStart(2, "0") + ":00" });
+      await message.reply({ content: "✅ Delivery time set to **" + hr + ":00 UTC**.", allowedMentions: { repliedUser: false } });
+      return;
+    }
+
+    // setup time — show interactive time buttons
+    if (/^time\s*$/i.test(sub)) {
+      await message.reply(buildSetupEmbed(message.guild.id));
+      return;
+    }
+
+    // setup timezone <tz> — set timezone directly
+    if (/^timezone\s+(.+)$/i.test(sub)) {
+      const tzInput = sub.match(/^timezone\s+(.+)$/i)[1].trim();
+      const TZ_ALIASES = {
+        "SGT": "Asia/Singapore", "JST": "Asia/Tokyo", "HKT": "Asia/Hong_Kong",
+        "IST": "Asia/Kolkata", "GST": "Asia/Dubai", "CET": "Europe/Berlin",
+        "GMT": "Europe/London", "BST": "Europe/London", "UTC": "UTC",
+        "EST": "America/New_York", "CST": "America/Chicago", "MST": "America/Denver",
+        "PST": "America/Los_Angeles", "BRT": "America/Sao_Paulo", "AEST": "Australia/Sydney",
+      };
+      const resolved = TZ_ALIASES[tzInput.toUpperCase()] || tzInput;
+      try {
+        Intl.DateTimeFormat("en-US", { timeZone: resolved });
+      } catch {
+        await message.reply({ content: "❌ Invalid timezone. Try `SGT`, `EST`, `PST`, or an IANA name like `America/Chicago`.", allowedMentions: { repliedUser: false } });
+        return;
+      }
+      updateServer(message.guild.id, { timezone: resolved });
+      const label = tzInput.toUpperCase() !== resolved ? tzInput.toUpperCase() + " → " + resolved : resolved;
+      await message.reply({ content: "✅ Timezone set to **" + label + "**.", allowedMentions: { repliedUser: false } });
+      return;
+    }
+
+    // setup timezone — show interactive timezone select
+    if (/^timezone\s*$/i.test(sub)) {
+      await message.reply(buildSetupEmbed(message.guild.id));
+      return;
+    }
+
+    // setup role — show interactive role select
+    if (/^role\s*$/i.test(sub)) {
+      await message.reply(buildSetupEmbed(message.guild.id));
+      return;
+    }
+
+    // setup role @role — set role by mention
+    if (/^role\s+<@&(\d+)>$/i.test(sub)) {
+      const roleId = sub.match(/^role\s+<@&(\d+)>$/i)[1];
+      updateServer(message.guild.id, { role_id: roleId });
+      await message.reply({ content: "✅ Ping role set to <@&" + roleId + ">.", allowedMentions: { repliedUser: false } });
+      return;
+    }
+
+    // setup role everyone
+    if (/^role\s+everyone$/i.test(sub)) {
+      updateServer(message.guild.id, { role_id: "everyone" });
+      await message.reply({ content: "✅ Ping role set to **@everyone**.", allowedMentions: { repliedUser: false } });
+      return;
+    }
+
+    // setup enable
+    if (/^enable\s*$/i.test(sub)) {
+      if (!server.webhook_url) {
+        await message.reply({ content: "❌ No channel configured. Type `setup` first.", allowedMentions: { repliedUser: false } });
+        return;
+      }
+      updateServer(message.guild.id, { active: true });
+      await message.reply({ content: "✅ Daily verse delivery **enabled**.", allowedMentions: { repliedUser: false } });
+      return;
+    }
+
+    // setup disable
+    if (/^disable\s*$/i.test(sub)) {
+      updateServer(message.guild.id, { active: false });
+      await message.reply({ content: "✅ Daily verse delivery **disabled**.", allowedMentions: { repliedUser: false } });
+      return;
+    }
+
+    // setup status
+    if (/^status\s*$/i.test(sub)) {
+      await message.reply(buildSetupEmbed(message.guild.id));
+      return;
+    }
+
+    // Unknown subcommand
+    await message.reply({ content: "❌ Unknown setup command. Try: `setup`, `setup channel`, `setup time 8`, `setup timezone SGT`, `setup role`, `setup enable`, `setup disable`, `setup status`.", allowedMentions: { repliedUser: false } });
+    return;
+  }
+
+  // setup (no args) — show interactive panel
   if (isShort && /^setup\s*$/i.test(text)) {
     if (!message.guild) {
       await message.reply({ content: "❌ Setup can only be used in a server.", allowedMentions: { repliedUser: false } });

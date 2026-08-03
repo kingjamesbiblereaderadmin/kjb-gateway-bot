@@ -783,7 +783,15 @@ function buildSetupEmbed(guildId) {
   const roleRow = new ActionRowBuilder().addComponents(
     new RoleSelectMenuBuilder()
       .setCustomId("setup_role")
-      .setPlaceholder("Ping role: " + (server.role_id ? "Custom" : "@everyone"))
+      .setPlaceholder("Select a ping role...")
+      .setMinValues(1)
+      .setMaxValues(1)
+  );
+  const everyoneRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("setup_everyone")
+      .setLabel("Use @everyone")
+      .setStyle(server.role_id === "everyone" ? ButtonStyle.Success : ButtonStyle.Secondary)
   );
 
   const tzRow = new ActionRowBuilder().addComponents(
@@ -834,7 +842,7 @@ function buildSetupEmbed(guildId) {
 
   return {
     embeds: [embed],
-    components: [channelRow, roleRow, tzRow, timeRow, toggleRow],
+    components: [channelRow, roleRow, everyoneRow, tzRow, timeRow, toggleRow],
     allowedMentions: { parse: [] },
   };
 }
@@ -1424,15 +1432,35 @@ client.on("interactionCreate", async (interaction) => {
   // Handle setup time buttons
   // Handle custom timezone modal submit
   if (interaction.isModalSubmit() && interaction.customId === "setup_tz_custom") {
-    const tzValue = interaction.fields.getTextInputValue("tz_value").trim();
+    let tzValue = interaction.fields.getTextInputValue("tz_value").trim();
+    const TZ_ALIASES = {
+      "SGT": "Asia/Singapore", "JST": "Asia/Tokyo", "KST": "Asia/Seoul",
+      "HKT": "Asia/Hong_Kong", "IST": "Asia/Kolkata", "GST": "Asia/Dubai",
+      "PKT": "Asia/Karachi", "BST": "Asia/Dhaka", "ICT": "Asia/Bangkok",
+      "PHT": "Asia/Manila", "CET": "Europe/Berlin", "EET": "Europe/Athens",
+      "MSK": "Europe/Moscow", "GMT": "Europe/London", "BST_UK": "Europe/London",
+      "UTC": "UTC", "EST": "America/New_York", "CST": "America/Chicago",
+      "MST": "America/Denver", "PST": "America/Los_Angeles",
+      "AKST": "America/Anchorage", "HST": "Pacific/Honolulu",
+      "BRT": "America/Sao_Paulo", "ART": "America/Argentina/Buenos_Aires",
+      "AEST": "Australia/Sydney", "NZST": "Pacific/Auckland",
+    };
+    const resolved = TZ_ALIASES[tzValue.toUpperCase()] || tzValue;
     try {
-      Intl.DateTimeFormat("en-US", { timeZone: tzValue });
+      Intl.DateTimeFormat("en-US", { timeZone: resolved });
     } catch (e) {
-      await interaction.reply({ content: "\u274C **" + tzValue + "** is not a valid timezone.\nExamples: \`Asia/Singapore\`, \`America/New_York\`, \`Europe/London\`", flags: 64 });
+      await interaction.reply({ content: "\u274C **" + tzValue + "** is not a valid timezone.\nTry abbreviations like \`SGT\`, \`EST\`, \`PST\`, or an IANA name like \`Asia/Singapore\`, \`America/New_York\`.", flags: 64 });
       return;
     }
-    updateServer(interaction.guild.id, { timezone: tzValue });
-    await interaction.reply({ content: "\u2705 Timezone set to **" + tzValue + "**.", flags: 64 });
+    updateServer(interaction.guild.id, { timezone: resolved });
+    await interaction.reply({ content: "\u2705 Timezone set to **" + resolved + "**" + (resolved !== tzValue ? " (" + tzValue.toUpperCase() + ")" : "") + ".", flags: 64 });
+    return;
+  }
+
+  if (interaction.isButton() && interaction.customId === "setup_everyone") {
+    updateServer(interaction.guild.id, { role_id: "everyone" });
+    await interaction.update(buildSetupEmbed(interaction.guild.id));
+    await interaction.followUp({ content: "\u2705 Ping role set to **@everyone**.", flags: 64 });
     return;
   }
 

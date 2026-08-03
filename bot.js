@@ -727,7 +727,7 @@ function buildWelcomeEmbed() {
       "• `setup role` — Change the ping role (or @everyone)",
       "• `setup enable` / `setup disable` — Pause or resume delivery",
       "• `setup status` — View current configuration",
-      "• `fix` — Repair webhook & reset delivery schedule",
+      "• `fix` — Repair webhook (keeps your schedule)",
       "",
       "**📖 Commands — just type (no slash needed):**",
       "`John 3:16` — Verse lookup",
@@ -1832,8 +1832,6 @@ client.on("interactionCreate", async (interaction) => {
         } catch (e) {
           steps.push("❌ Webhook repair failed: " + e.message);
         }
-        updateServer(interaction.guild.id, { last_sent_date: "" });
-        steps.push("✅ Delivery schedule reset");
         await interaction.editReply({ content: steps.join("\n") });
         return;
       }

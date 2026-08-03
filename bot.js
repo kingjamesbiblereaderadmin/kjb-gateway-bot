@@ -156,7 +156,7 @@ const client = new Client({
 client.once("ready", () => {
   console.log(`✅ KJB Gateway Bot online as ${client.user.tag}`);
   console.log(`   Listening for Bible references in ${client.guilds.cache.size} servers`);
-  client.user.setActivity("KJB Reader | kjb help or type a verse", { type: 3 });
+  client.user.setActivity("KJB Reader | type a verse or command", { type: 3 });
 });
 
 client.on("messageCreate", async (message) => {
@@ -164,39 +164,38 @@ client.on("messageCreate", async (message) => {
 
   const content = message.content.trim();
   const isMention = message.mentions.has(client.user);
-  const isKjb = /^kjb\s+/i.test(content);
-  const isCommand = isMention || isKjb;
+  const cleanContent = content.replace(/<@!?\d+>/g, "").trim();
   
-  // Get the command text (strip mention or kjb prefix)
-  let cmdText = content.replace(/<@!?\d+>/g, "").trim();
-  if (isKjb) cmdText = cmdText.replace(/^kjb\s+/i, "").trim();
-  if (isMention) cmdText = cmdText; // already stripped mention
+  // All commands work without any prefix — just type the command
+  // But we use cleanContent (mention stripped) so @mention still works too
+  const text = cleanContent || content;
   
+  // Only treat as a command if the message is reasonably short (avoid false triggers in long messages)
+  const isShort = text.length <= 200;
+
   // Help command
-  if (isCommand && /^(help|commands)\s*$/i.test(cmdText)) {
+  if (isShort && /^(help|commands)\s*$/i.test(text)) {
     const helpEmbed = new EmbedBuilder()
       .setTitle("📖 KJB Reader — Help")
       .setDescription([
-        "**No mention or slash commands needed!**",
+        "**No slash commands or @mention needed!**",
         "",
         "**Type a verse reference in any channel:**",
         "• `John 3:16` — Instant verse lookup",
-        "• `Romans 3:25` — Works anywhere",
         "• `Psalm 23` — Read a full chapter",
         "• `1 Corinthians 15:1-4` — Verse range",
         "",
-        "**Or use the kjb prefix:**",
-        "• `kjb John 3:16` — Look up a verse",
-        "• `kjb daily` — Today's verse",
-        "• `kjb random` — Random verse",
-        "• `kjb random chapter` — Random chapter",
-        "• `kjb search faith` — Search by keyword",
-        "• `kjb search love hope` — Multi-word search",
-        "• `kjb toc` — Browse the Bible table of contents",
-        "• `kjb gospel` — How to be saved",
-        "• `kjb help` — This message",
+        "**Or just type a command:**",
+        "• `daily` — Today's verse",
+        "• `random` — Random verse",
+        "• `random chapter` — Random chapter",
+        "• `search faith` — Search by keyword",
+        "• `search love hope` — Multi-word search",
+        "• `toc` — Browse the Bible table of contents",
+        "• `gospel` — How to be saved",
+        "• `help` — This message",
         "",
-        "**You can also @mention the bot** with any of the same commands.",
+        "**You can also @mention the bot** or use `kjb` prefix with any command.",
         "",
         "**Slash commands still work too:**",
         "`/verse`, `/chapter`, `/search`, `/random`, `/daily`, `/gospel`, `/toc`",
@@ -215,7 +214,7 @@ client.on("messageCreate", async (message) => {
   }
 
   // Daily verse
-  if (isCommand && /^daily\s*$/i.test(cmdText)) {
+  if (isShort && /^daily\s*$/i.test(text)) {
     try {
       const now = new Date();
       const data = await callBibleApi({ action: "daily_verse", clientDate: `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}` });
@@ -234,7 +233,7 @@ client.on("messageCreate", async (message) => {
   }
 
   // Random verse
-  if (isCommand && /^random\s*$/i.test(cmdText)) {
+  if (isShort && /^random\s*$/i.test(text)) {
     try {
       const data = await callBibleApi({ action: "random_verse" });
       if (data?.verse) {
@@ -245,7 +244,7 @@ client.on("messageCreate", async (message) => {
   }
 
   // Random chapter
-  if (isCommand && /^random\s+chapter\s*$/i.test(cmdText)) {
+  if (isShort && /^random\s+chapter\s*$/i.test(text)) {
     try {
       const book = ALL_BOOKS[Math.floor(Math.random() * ALL_BOOKS.length)];
       const chapter = Math.floor(Math.random() * KJV_BOOKS[book]) + 1;
@@ -258,8 +257,8 @@ client.on("messageCreate", async (message) => {
   }
 
   // Search
-  if (isCommand && /^search\s+/i.test(cmdText)) {
-    const query = cmdText.replace(/^search\s+/i, "").trim();
+  if (isShort && /^search\s+/i.test(text)) {
+    const query = text.replace(/^search\s+/i, "").trim();
     if (!query) return;
     try {
       const keywords = query.split(/\s+/).filter(Boolean);
@@ -288,7 +287,7 @@ client.on("messageCreate", async (message) => {
   }
 
   // Gospel
-  if (isCommand && /^gospel\s*$/i.test(cmdText)) {
+  if (isShort && /^gospel\s*$/i.test(text)) {
     const embed = new EmbedBuilder()
       .setTitle("✝️ HOW TO BE SAVED")
       .setDescription("The Gospel is the glad tidings of the Lord Jesus Christ:\n\n**Trust he is God, died, shed his blood, buried and rose again on the third day for our sins according to the scriptures.**\n\n📖 Read the full gospel:\nhttps://kingjamesbiblereader.com/gospel")
@@ -299,18 +298,18 @@ client.on("messageCreate", async (message) => {
   }
 
   // TOC (Table of Contents)
-  if (isCommand && /^(toc|chapters|books|table of contents)\s*$/i.test(cmdText)) {
+  if (isShort && /^(toc|chapters|books|table of contents)\s*$/i.test(text)) {
     await message.reply(buildBibleTocEmbed(0));
     return;
   }
 
   // Try to parse as Bible reference
-  let refText = isCommand ? cmdText : content;
+  let refText = text;
   const parsed = parseRef(refText);
 
-  // Also try matching a reference anywhere in the message (non-mention, non-kjb only)
+  // Also try matching a reference anywhere in the message (inline detection)
   let inlineRef = null;
-  if (!isCommand && !parsed) {
+  if (!parsed) {
     const inlineMatch = content.match(/\b((?:[123]\s)?[A-Za-z]{2,}(?:\s[A-Za-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?\b/);
     if (inlineMatch) {
       const book = resolveBook(inlineMatch[1]);
@@ -327,7 +326,7 @@ client.on("messageCreate", async (message) => {
   if (!ref) return;
 
   // Ignore if message is too long (probably not a Bible reference query)
-  if (!isCommand && content.length > 100) return;
+  if (!isMention && content.length > 100) return;
 
   try {
     // Verse lookup
@@ -343,7 +342,7 @@ client.on("messageCreate", async (message) => {
       if (verses.length) {
         await message.reply(buildVerseEmbed(verses));
       } else {
-        await message.reply({ content: `❌ "${refText}" not found in the KJB.`, allowedMentions: { repliedUser: false } });
+        if (isMention) await message.reply({ content: `❌ "${refText}" not found in the KJB.`, allowedMentions: { repliedUser: false } });
       }
     }
     // Chapter lookup
@@ -352,12 +351,12 @@ client.on("messageCreate", async (message) => {
       if (data?.verses?.length) {
         await message.reply(buildChapterEmbed(ref.book, ref.chapter, data.verses, data.colophon, data.bookFullName));
       } else {
-        await message.reply({ content: `❌ ${ref.book} ${ref.chapter} not found.`, allowedMentions: { repliedUser: false } });
+        if (isMention) await message.reply({ content: `❌ ${ref.book} ${ref.chapter} not found.`, allowedMentions: { repliedUser: false } });
       }
     }
   } catch (e) {
     console.error("ref lookup:", e.message);
-    if (isCommand) await message.reply({ content: "❌ Something went wrong. Try again!", allowedMentions: { repliedUser: false } });
+    if (isMention) await message.reply({ content: "❌ Something went wrong. Try again!", allowedMentions: { repliedUser: false } });
   }
 });
 

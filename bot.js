@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, PermissionsBitField } from "discord.js";
+import { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, PermissionsBitField, ModalBuilder, TextInputBuilder } from "discord.js";
 import cron from "node-cron";
 import fs from "fs";
 import path from "path";
@@ -720,19 +720,29 @@ client.on("guildCreate", async (guild) => {
 // ── Build interactive setup embed ────────────────────────────────────────────
 const COMMON_TIMEZONES = [
   { label: "UTC", value: "UTC" },
-  { label: "Singapore (SGT)", value: "Asia/Singapore" },
-  { label: "Tokyo (JST)", value: "Asia/Tokyo" },
-  { label: "Hong Kong (HKT)", value: "Asia/Hong_Kong" },
-  { label: "India (IST)", value: "Asia/Kolkata" },
-  { label: "Dubai (GST)", value: "Asia/Dubai" },
-  { label: "Central Europe (CET)", value: "Europe/Berlin" },
-  { label: "UK (GMT/BST)", value: "Europe/London" },
   { label: "US Eastern (EST)", value: "America/New_York" },
   { label: "US Central (CST)", value: "America/Chicago" },
   { label: "US Mountain (MST)", value: "America/Denver" },
   { label: "US Pacific (PST)", value: "America/Los_Angeles" },
+  { label: "Alaska (AKST)", value: "America/Anchorage" },
+  { label: "Hawaii (HST)", value: "Pacific/Honolulu" },
   { label: "Brazil (BRT)", value: "America/Sao_Paulo" },
-  { label: "Australia (AEST)", value: "Australia/Sydney" },
+  { label: "Argentina (ART)", value: "America/Argentina/Buenos_Aires" },
+  { label: "Mexico City (CST)", value: "America/Mexico_City" },
+  { label: "UK (GMT/BST)", value: "Europe/London" },
+  { label: "Central Europe (CET)", value: "Europe/Berlin" },
+  { label: "Eastern Europe (EET)", value: "Europe/Athens" },
+  { label: "Moscow (MSK)", value: "Europe/Moscow" },
+  { label: "Dubai (GST)", value: "Asia/Dubai" },
+  { label: "Pakistan (PKT)", value: "Asia/Karachi" },
+  { label: "India (IST)", value: "Asia/Kolkata" },
+  { label: "Bangladesh (BST)", value: "Asia/Dhaka" },
+  { label: "Thailand/Vietnam (ICT)", value: "Asia/Bangkok" },
+  { label: "Singapore/Philippines (SGT)", value: "Asia/Singapore" },
+  { label: "Hong Kong/China (HKT)", value: "Asia/Hong_Kong" },
+  { label: "Japan/Korea (JST)", value: "Asia/Tokyo" },
+  { label: "Australia East (AEST)", value: "Australia/Sydney" },
+  { label: "New Zealand (NZST)", value: "Pacific/Auckland" },
 ];
 
 function buildSetupEmbed(guildId) {
@@ -784,6 +794,11 @@ function buildSetupEmbed(guildId) {
         value: t.value,
         default: t.value === tz,
       })))
+      .addOptions({
+        label: "\u270f\uFE0F Custom timezone...",
+        value: "__custom__",
+        default: false,
+      })
   );
 
   // Time as dropdown — 24 options in one row instead of 24 buttons in 4 rows
@@ -1365,9 +1380,25 @@ client.on("interactionCreate", async (interaction) => {
     
     if (id === "setup_tz") {
       const tz = interaction.values[0];
+      if (tz === "__custom__") {
+        const modal = new ModalBuilder()
+          .setCustomId("setup_tz_custom")
+          .setTitle("Enter IANA Timezone");
+        const input = new TextInputBuilder()
+          .setCustomId("tz_value")
+          .setLabel("e.g. Asia/Tokyo, America/New_York, Europe/London")
+          .setStyle(1)
+          .setMinLength(2)
+          .setMaxLength(40)
+          .setPlaceholder("Enter a valid IANA timezone name")
+          .setRequired(true);
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        await interaction.showModal(modal);
+        return;
+      }
       updateServer(interaction.guild.id, { timezone: tz });
       await interaction.update(buildSetupEmbed(interaction.guild.id));
-      await interaction.followUp({ content: `\u2705 Timezone set to **${tz}**.`, flags: 64 });
+      await interaction.followUp({ content: "\u2705 Timezone set to **" + tz + "**.", flags: 64 });
       return;
     }
 
@@ -1384,6 +1415,20 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // Handle setup time buttons
+  // Handle custom timezone modal submit
+  if (interaction.isModalSubmit() && interaction.customId === "setup_tz_custom") {
+    const tzValue = interaction.fields.getTextInputValue("tz_value").trim();
+    try {
+      Intl.DateTimeFormat("en-US", { timeZone: tzValue });
+    } catch (e) {
+      await interaction.reply({ content: "\u274C **" + tzValue + "** is not a valid timezone.\nExamples: \`Asia/Singapore\`, \`America/New_York\`, \`Europe/London\`", flags: 64 });
+      return;
+    }
+    updateServer(interaction.guild.id, { timezone: tzValue });
+    await interaction.reply({ content: "\u2705 Timezone set to **" + tzValue + "**.", flags: 64 });
+    return;
+  }
+
   if (interaction.isButton() && interaction.customId === "setup_enable") {
     updateServer(interaction.guild.id, { active: true });
     await interaction.update(buildSetupEmbed(interaction.guild.id));

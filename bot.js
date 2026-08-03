@@ -544,6 +544,7 @@ client.on("ready", async () => {
   // Sync any guilds not yet in servers.json (catches guilds added while offline)
   try {
     const guilds = [...client.guilds.cache.values()];
+    const servers = loadServers();
     for (const guild of guilds) {
       const existing = servers.find(s => s.guild_id === guild.id);
       if (!existing) {

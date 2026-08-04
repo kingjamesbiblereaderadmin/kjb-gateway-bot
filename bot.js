@@ -1076,23 +1076,49 @@ client.on("messageCreate", async (message) => {
   }
 
   // Search (paginated, 5 per page, full verse text with highlighting)
+  // Supports: "search faith", "search faith ot", "search faith nt",
+  //           "search faith whole", "search faith ot whole", "search faith, hope nt"
   if (isShort && /^search\s+/i.test(text)) {
-    const query = text.replace(/^search\s+/i, "").trim();
-    if (!query) return;
+    let raw = text.replace(/^search\s+/i, "").trim();
+    if (!raw) return;
     try {
+      // Extract optional testament and match mode from the query
+      let testament = null;
+      let wholeWord = false;
+      // Check for "whole" / "exact" keyword
+      const wholeMatch = raw.match(/\b(whole|exact)\s*(?:word)?\b/i);
+      if (wholeMatch) {
+        wholeWord = true;
+        raw = raw.replace(wholeMatch[0], "").trim();
+      }
+      // Check for testament
+      const testamentMatch = raw.match(/\b(ot|nt|old\s*testament|new\s*testament|old\s*test|new\s*test)\b\s*$/i);
+      if (testamentMatch) {
+        const t = testamentMatch[1].toLowerCase();
+        testament = (t.startsWith("o") || t === "ot") ? "OT" : "NT";
+        raw = raw.replace(testamentMatch[0], "").trim();
+      }
+      const query = raw;
       const words = query.toLowerCase().split(/[,;\s]+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
       if (!words.length) return;
 
+      function filterTestament(verses) {
+        if (!testament) return verses;
+        return verses.filter(v => testament === "OT" ? OT_SET.has(v.book) : !OT_SET.has(v.book));
+      }
+
       let results;
       if (words.length === 1) {
-        const searchData = await callBibleApi({ action: "search", query: words[0], offset: 0 });
-        results = { total: searchData?.total || 0, verses: searchData?.results || [] };
+        const searchData = await callBibleApi({ action: "search", query: words[0], offset: 0, wholeWord });
+        let verses = searchData?.results || [];
+        verses = filterTestament(verses);
+        results = { total: verses.length, verses };
       } else {
         // Multi-word intersection: fetch all results for each keyword, find intersection
         const allSets = await Promise.all(words.map(async w => {
           const all = [];
           for (let off = 0; off < 1000; off += 100) {
-            const d = await callBibleApi({ action: "search", query: w, offset: off });
+            const d = await callBibleApi({ action: "search", query: w, offset: off, wholeWord });
             const batch = d?.results || [];
             if (!batch.length) break;
             all.push(...batch);
@@ -1103,20 +1129,22 @@ client.on("messageCreate", async (message) => {
         let minIdx = 0;
         for (let i = 1; i < allSets.length; i++) { if (allSets[i].length < allSets[minIdx].length) minIdx = i; }
         const otherSets = allSets.filter((_, i) => i !== minIdx).map(s => new Set(s.map(v => v.ref || `${v.book} ${v.chapter}:${v.verse}`)));
-        results = {
-          total: 0,
-          verses: allSets[minIdx].filter(v => {
-            const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
-            return otherSets.every(s => s.has(ref));
-          })
-        };
-        results.total = results.verses.length;
+        let intersected = allSets[minIdx].filter(v => {
+          const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
+          return otherSets.every(s => s.has(ref));
+        });
+        intersected = filterTestament(intersected);
+        results = { total: intersected.length, verses: intersected };
       }
       if (!results.total) {
-        await message.reply({ content: `❌ No verses found for "**${query}**".`, allowedMentions: { repliedUser: false } });
+        let hint = "";
+        if (testament) hint += ` in the ${testament === "OT" ? "Old" : "New"} Testament`;
+        if (wholeWord) hint += " (whole word match)";
+        await message.reply({ content: `❌ No verses found for "**${query}**"${hint}.`, allowedMentions: { repliedUser: false } });
         return;
       }
-      await message.reply(buildSearchEmbed(query, words, results.total, results.verses, 0));
+      const searchTitle = `${query}${testament ? ` (${testament === "OT" ? "Old" : "New"} Testament)` : ""}${wholeWord ? " · whole word" : ""}`;
+      await message.reply(buildSearchEmbed(searchTitle, words, results.total, results.verses, 0));
     } catch (e) {
       console.error("search:", e.message);
       await message.reply({ content: "❌ Search failed. Try again!", allowedMentions: { repliedUser: false } });

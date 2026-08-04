@@ -1114,24 +1114,26 @@ client.on("messageCreate", async (message) => {
         verses = filterTestament(verses);
         results = { total: verses.length, verses };
       } else {
-        // Multi-word intersection: fetch all results for each keyword, find intersection
-        const allSets = await Promise.all(words.map(async w => {
-          const all = [];
-          for (let off = 0; off < 1000; off += 100) {
-            const d = await callBibleApi({ action: "search", query: w, offset: off, wholeWord });
-            const batch = d?.results || [];
-            if (!batch.length) break;
-            all.push(...batch);
-          }
-          return all;
-        }));
-        // Use smallest set as base, filter by intersection on ref
+        // Smart multi-word: fetch only the rarest word fully, then text-match the rest
+        const firstPages = await Promise.all(words.map(w =>
+          callBibleApi({ action: "search", query: w, offset: 0, wholeWord })
+        ));
         let minIdx = 0;
-        for (let i = 1; i < allSets.length; i++) { if (allSets[i].length < allSets[minIdx].length) minIdx = i; }
-        const otherSets = allSets.filter((_, i) => i !== minIdx).map(s => new Set(s.map(v => v.ref || `${v.book} ${v.chapter}:${v.verse}`)));
-        let intersected = allSets[minIdx].filter(v => {
-          const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
-          return otherSets.every(s => s.has(ref));
+        for (let i = 1; i < words.length; i++) {
+          if ((firstPages[i]?.total || 0) < (firstPages[minIdx]?.total || 0)) minIdx = i;
+        }
+        const baseResults = [...(firstPages[minIdx]?.results || [])];
+        const total = firstPages[minIdx]?.total || 0;
+        for (let off = 100; off < total && off < 5000; off += 100) {
+          const d = await callBibleApi({ action: "search", query: words[minIdx], offset: off, wholeWord });
+          const batch = d?.results || [];
+          if (!batch.length) break;
+          baseResults.push(...batch);
+        }
+        const otherWords = words.filter((_, i) => i !== minIdx);
+        let intersected = baseResults.filter(v => {
+          const text = (v.text || "").toLowerCase();
+          return otherWords.every(w => text.includes(w));
         });
         intersected = filterTestament(intersected);
         results = { total: intersected.length, verses: intersected };
@@ -1810,22 +1812,31 @@ client.on("interactionCreate", async (interaction) => {
           verses = filterTestament(verses);
           results = { total: verses.length, verses };
         } else {
-          const allSets = await Promise.all(words.map(async w => {
-            const all = [];
-            for (let off = 0; off < 1000; off += 100) {
-              const d = await callBibleApi({ action: "search", query: w, offset: off, wholeWord });
-              const batch = d?.results || [];
-              if (!batch.length) break;
-              all.push(...batch);
-            }
-            return all;
-          }));
+          // Smart multi-word: fetch only the rarest word fully, then text-match the rest
+          // 1) Get total counts for each word via first page
+          const firstPages = await Promise.all(words.map(w =>
+            callBibleApi({ action: "search", query: w, offset: 0, wholeWord })
+          ));
+          // Find rarest word (fewest total results)
           let minIdx = 0;
-          for (let i = 1; i < allSets.length; i++) { if (allSets[i].length < allSets[minIdx].length) minIdx = i; }
-          const otherSets = allSets.filter((_, i) => i !== minIdx).map(s => new Set(s.map(v => v.ref || `${v.book} ${v.chapter}:${v.verse}`)));
-          let intersected = allSets[minIdx].filter(v => {
-            const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
-            return otherSets.every(s => s.has(ref));
+          for (let i = 1; i < words.length; i++) {
+            if ((firstPages[i]?.total || 0) < (firstPages[minIdx]?.total || 0)) minIdx = i;
+          }
+          // 2) Fetch ALL results for the rarest word
+          const baseResults = [...(firstPages[minIdx]?.results || [])];
+          const total = firstPages[minIdx]?.total || 0;
+          for (let off = 100; off < total && off < 5000; off += 100) {
+            const d = await callBibleApi({ action: "search", query: words[minIdx], offset: off, wholeWord });
+            const batch = d?.results || [];
+            if (!batch.length) break;
+            baseResults.push(...batch);
+          }
+          // 3) Build list of other words to check in verse text
+          const otherWords = words.filter((_, i) => i !== minIdx);
+          // 4) Filter base results: verse text must contain all other words
+          let intersected = baseResults.filter(v => {
+            const text = (v.text || "").toLowerCase();
+            return otherWords.every(w => text.includes(w));
           });
           intersected = filterTestament(intersected);
           results = { total: intersected.length, verses: intersected };

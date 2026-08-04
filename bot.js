@@ -1798,6 +1798,7 @@ client.on("interactionCreate", async (interaction) => {
         const wholeWord = matchMode === "whole";
         const words = query.toLowerCase().split(/[,;\s]+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
         if (!words.length) { await interaction.editReply({ content: "❌ Please provide a keyword." }); return; }
+        console.log(`[search] query="${query}" words=${JSON.stringify(words)} testament=${testament} wholeWord=${wholeWord}`);
         
         // Use existing OT_SET for client-side testament filtering
         function filterTestament(verses) {
@@ -1841,6 +1842,7 @@ client.on("interactionCreate", async (interaction) => {
           intersected = filterTestament(intersected);
           results = { total: intersected.length, verses: intersected };
         }
+        console.log(`[search] results: total=${results.total} verses=${results.verses.length}`);
         if (!results.total) {
           let hint = "";
           if (testament) hint += ` in the ${testament === "OT" ? "Old" : "New"} Testament`;

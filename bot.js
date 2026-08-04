@@ -454,15 +454,37 @@ function chunkVerses(verses) {
 }
 
 // Send verse embed(s) — handles large verse sets by splitting into multiple messages
+// Group verses into contiguous ranges (same book+chapter, consecutive verse numbers)
+// Each group becomes one message; separate refs get their own messages
+function groupContiguousVerses(verses) {
+  if (verses.length <= 1) return [verses];
+  const groups = [];
+  let cur = [verses[0]];
+  for (let i = 1; i < verses.length; i++) {
+    const prev = verses[i - 1];
+    const v = verses[i];
+    const contiguous = v.book === prev.book && v.chapter === prev.chapter && v.verse === prev.verse + 1;
+    if (contiguous) {
+      cur.push(v);
+    } else {
+      groups.push(cur);
+      cur = [v];
+    }
+  }
+  if (cur.length) groups.push(cur);
+  return groups;
+}
+
 async function sendVerseEmbeds(target, verses, isFollowUp = false) {
   if (verses.length <= 1) {
     if (isFollowUp) await target.followUp(buildVerseEmbed(verses));
     else await target.reply(buildVerseEmbed(verses));
     return;
   }
-  // Each verse gets its own message
-  for (let i = 0; i < verses.length; i++) {
-    const embed = buildVerseEmbed([verses[i]]);
+  // Group contiguous verses (ranges) together; non-contiguous get own messages
+  const groups = groupContiguousVerses(verses);
+  for (let i = 0; i < groups.length; i++) {
+    const embed = buildVerseEmbed(groups[i]);
     if (i === 0 && !isFollowUp) await target.reply(embed);
     else await target.followUp(embed);
   }
@@ -2203,9 +2225,10 @@ client.on("interactionCreate", async (interaction) => {
     try {
       const verses = (await resolveRefRange(ref)).filter(isValidVerse);
       if (verses.length) {
-        for (let i = 0; i < verses.length; i++) {
-          if (i === 0) await interaction.reply({ ...buildVerseEmbed([verses[i]]), flags: 64 });
-          else await interaction.followUp({ ...buildVerseEmbed([verses[i]]), flags: 64 });
+        const groups = groupContiguousVerses(verses);
+        for (let i = 0; i < groups.length; i++) {
+          if (i === 0) await interaction.reply({ ...buildVerseEmbed(groups[i]), flags: 64 });
+          else await interaction.followUp({ ...buildVerseEmbed(groups[i]), flags: 64 });
         }
       } else {
         interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {});

@@ -407,6 +407,60 @@ function buildVerseEmbed(verses) {
   return { embeds: [embed], components: rows };
 }
 
+// Split verses into page-sized chunks where each page's description stays under 3800 chars
+function chunkVerses(verses) {
+  if (verses.length <= 1) return [verses];
+  const pages = [];
+  let cur = [];
+  let curLen = 0;
+  for (const v of verses) {
+    // Estimate length: ref + text + formatting overhead
+    const estLen = (v.ref || `${v.book} ${v.chapter}:${v.verse}`).length + (v.text || "").length + 30;
+    if (curLen + estLen > 3800 && cur.length > 0) {
+      pages.push(cur);
+      cur = [];
+      curLen = 0;
+    }
+    cur.push(v);
+    curLen += estLen;
+  }
+  if (cur.length) pages.push(cur);
+  return pages;
+}
+
+// Send verse embed(s) — handles large verse sets by splitting into multiple messages
+async function sendVerseEmbeds(target, verses, isFollowUp = false) {
+  const pages = chunkVerses(verses);
+  if (pages.length <= 1) {
+    if (isFollowUp) await target.followUp(buildVerseEmbed(verses));
+    else await target.reply(buildVerseEmbed(verses));
+    return;
+  }
+  // Multiple pages: first page as reply, rest as follow-ups
+  for (let i = 0; i < pages.length; i++) {
+    const embed = buildVerseEmbed(pages[i]);
+    // Add page indicator to footer
+    if (embeds_footer_modify(embed, i + 1, pages.length)) {
+      // footer modified inline
+    }
+    if (i === 0 && !isFollowUp) await target.reply(embed);
+    else await target.followUp(embed);
+  }
+}
+
+// Helper to add page indicator to embed footer
+function embeds_footer_modify(embed, page, total) {
+  if (total <= 1) return false;
+  const e = embed.embeds?.[0];
+  if (e) {
+    const oldFooter = e.data?.footer?.text || "KJB Reader • kingjamesbiblereader.com";
+    if (!oldFooter.includes("Page")) {
+      e.setFooter({ text: `${oldFooter} • Page ${page} of ${total}` });
+    }
+  }
+  return true;
+}
+
 // Chapter embed — already matches V3, keeping as-is
 function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page = 0) {
   const pageSize = 20;
@@ -1469,7 +1523,7 @@ client.on("messageCreate", async (message) => {
       
       const validDeduped = deduped.filter(isValidVerse);
       if (validDeduped.length) {
-        await message.reply(buildVerseEmbed(validDeduped));
+        await sendVerseEmbeds(message, validDeduped);
       } else {
         await message.reply({ content: "❌ Verses not found.", allowedMentions: { repliedUser: false } });
       }
@@ -1517,7 +1571,7 @@ client.on("messageCreate", async (message) => {
       const results = await Promise.all(refs.map(r => callBibleApi({ action: "resolve_refs", refs: [r] }).then(d => d?.verses?.[0]).catch(() => null)));
       const verses = results.filter(isValidVerse);
       if (verses.length) {
-        await message.reply(buildVerseEmbed(verses));
+        await sendVerseEmbeds(message, verses);
       } else {
         await message.reply({ content: `❌ "${refText}" not found in the KJB.`, allowedMentions: { repliedUser: false } });
       }
@@ -1742,7 +1796,7 @@ client.on("interactionCreate", async (interaction) => {
         }
         if (parsed.verseStart) {
           const verses = (await resolveRefRange(refText)).filter(isValidVerse);
-          if (verses.length) await interaction.reply(buildVerseEmbed(verses));
+          if (verses.length) await sendVerseEmbeds(interaction, verses);
           else await interaction.reply({ content: `❌ "${refText}" not found in the KJB.`, flags: 64 });
         } else {
           const data = await callBibleApi({ action: "getChapter", book: parsed.book, chapter: parsed.chapter });
@@ -2126,7 +2180,15 @@ client.on("interactionCreate", async (interaction) => {
     try {
       const verses = (await resolveRefRange(ref)).filter(isValidVerse);
       if (verses.length) {
-        await interaction.reply({ ...buildVerseEmbed(verses), flags: 64 });
+        const pages = chunkVerses(verses);
+        if (pages.length <= 1) {
+          await interaction.reply({ ...buildVerseEmbed(verses), flags: 64 });
+        } else {
+          for (let i = 0; i < pages.length; i++) {
+            if (i === 0) await interaction.reply({ ...buildVerseEmbed(pages[i]), flags: 64 });
+            else await interaction.followUp({ ...buildVerseEmbed(pages[i]), flags: 64 });
+          }
+        }
       } else {
         interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {});
       }

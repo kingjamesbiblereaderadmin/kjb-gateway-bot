@@ -258,23 +258,37 @@ async function callBibleApi(payload) {
 // Resolve a ref that may include a dash-range (e.g. "John 3:16-18") into a
 // full array of verse objects — the bibleApi's resolve_refs does NOT support
 // dash ranges natively, so ranges must be expanded into individual fetches.
+// Fetch many verses in parallel batches (API accepts arrays of refs)
+async function fetchVersesBatch(refs) {
+  // Split into batches of 25 refs per API call
+  const BATCH_SIZE = 25;
+  const batches = [];
+  for (let i = 0; i < refs.length; i += BATCH_SIZE) {
+    batches.push(refs.slice(i, i + BATCH_SIZE));
+  }
+  const results = await Promise.all(batches.map(batch =>
+    callBibleApi({ action: "resolve_refs", refs: batch })
+      .then(d => d?.verses || [])
+      .catch(e => { console.error("batch fetch failed:", e.message); return []; })
+  ));
+  // Flatten and preserve order
+  return results.flat();
+}
+
 async function resolveRefRange(ref) {
   const parsed = parseRef(ref);
   if (!parsed) return [];
   if (parsed.verseStart && parsed.verseEnd) {
     const rangeSize = parsed.verseEnd - parsed.verseStart + 1;
-    if (rangeSize > 50) return []; // Cap ranges at 50 verses
-    const verses = [];
+    if (rangeSize > 200) return []; // Cap ranges at 200 verses
+    // Build all refs and fetch in parallel batches
+    const refs = [];
     for (let v = parsed.verseStart; v <= parsed.verseEnd; v++) {
-      try {
-        const d = await callBibleApi({ action: "resolve_refs", refs: [`${parsed.book} ${parsed.chapter}:${v}`] });
-        if (d?.verses?.[0]) verses.push(d.verses[0]);
-      } catch (e) { console.error("resolveRefRange verse fetch failed:", e.message); }
+      refs.push(`${parsed.book} ${parsed.chapter}:${v}`);
     }
-    return verses;
+    return await fetchVersesBatch(refs);
   }
-  // Single verse — must use the resolved canonical book name (e.g. "Eph" -> "Ephesians"),
-  // never the raw user input, since the API's resolve_refs does not understand abbreviations.
+  // Single verse
   const singleRef = parsed.verseStart ? `${parsed.book} ${parsed.chapter}:${parsed.verseStart}` : ref;
   const d = await callBibleApi({ action: "resolve_refs", refs: [singleRef] });
   return d?.verses || [];
@@ -1507,37 +1521,25 @@ client.on("messageCreate", async (message) => {
     // Allow up to 500-char messages with multi-refs; cap total verses at 50
     if (!isMention && content.length > 500) return;
     try {
-      const allVerses = [];
-      let totalToFetch = 0;
+      // Build all refs and fetch in parallel batches
+      const allRefs = [];
       for (const m of allMatches) {
-        const vsEnd = m[4] ? parseInt(m[4]) : null;
+        const book = tryResolveBook(m[1]);
+        const chapter = parseInt(m[2]);
         const vsStart = parseInt(m[3]);
-        totalToFetch += vsEnd ? (vsEnd - vsStart + 1) : 1;
-      }
-      const MAX_VERSES = 50;
-      if (totalToFetch > MAX_VERSES) {
-        await message.reply({ content: `❌ That's ${totalToFetch} verses — please limit to ${MAX_VERSES} at a time.`, allowedMentions: { repliedUser: false } });
-        return;
-      }
-      for (const m of allMatches) {
-        try {
-          const book = tryResolveBook(m[1]);
-          const chapter = parseInt(m[2]);
-          const vsStart = parseInt(m[3]);
-          const vsEnd = m[4] ? parseInt(m[4]) : null;
-          if (vsEnd) {
-            for (let v = vsStart; v <= vsEnd; v++) {
-              const d = await callBibleApi({ action: "resolve_refs", refs: [`${book} ${chapter}:${v}`] });
-              if (d?.verses?.[0]) allVerses.push(d.verses[0]);
-            }
-          } else {
-            const d = await callBibleApi({ action: "resolve_refs", refs: [`${book} ${chapter}:${vsStart}`] });
-            if (d?.verses?.[0]) allVerses.push(d.verses[0]);
-          }
-        } catch (verseErr) {
-          console.error("multi-ref verse fetch failed:", verseErr.message);
+        const vsEnd = m[4] ? parseInt(m[4]) : null;
+        if (vsEnd) {
+          for (let v = vsStart; v <= vsEnd; v++) allRefs.push(`${book} ${chapter}:${v}`);
+        } else {
+          allRefs.push(`${book} ${chapter}:${vsStart}`);
         }
       }
+      const MAX_VERSES = 200;
+      if (allRefs.length > MAX_VERSES) {
+        await message.reply({ content: `❌ That's ${allRefs.length} verses — please limit to ${MAX_VERSES} at a time.`, allowedMentions: { repliedUser: false } });
+        return;
+      }
+      const allVerses = await fetchVersesBatch(allRefs);
       // Deduplicate by ref, preserve user input order
       const seen = new Set();
       const deduped = allVerses.filter(v => {

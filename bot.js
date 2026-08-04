@@ -332,7 +332,7 @@ function buildVerseEmbed(verses) {
     title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
     desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
     desc += verses.map(v => {
-      const heading = v.heading ? `**${v.heading}.**\n` : "";
+      const heading = v.heading ? `**${v.heading}**\n` : "";
       return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
     }).join("\n\n");
   } else if (valid.length === 1) {
@@ -344,7 +344,7 @@ function buildVerseEmbed(verses) {
     // Same book, different chapters
     title = fullTitle;
     desc = verses.map(v => {
-      const heading = v.heading ? `**${v.heading}.**\n` : "";
+      const heading = v.heading ? `**${v.heading}**\n` : "";
       return `${heading}**${v.chapter}:${v.verse}**\n"${formatKJV(v.text)}"`;
     }).join("\n\n");
   } else {
@@ -357,7 +357,7 @@ function buildVerseEmbed(verses) {
       } else {
         const ref = `${g[0].chapter}:${g[0].verse}–${g[g.length - 1].verse}`;
         const text = g.map(v => {
-          const heading = v.heading ? `**${v.heading}.**\n` : "";
+          const heading = v.heading ? `**${v.heading}**\n` : "";
           return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
         }).join("\n\n");
         return `**${gTitle} — ${ref}**\n${text}`;
@@ -515,7 +515,7 @@ function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page =
     text += `¶ ${formatKJV(verses[0].superscription)}\n\n`;
   }
   text += pageVerses.map(v => {
-    const heading = v.heading ? `**${v.heading}.**\n` : "";
+    const heading = v.heading ? `**${v.heading}**\n` : "";
     return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
   }).join("\n\n");
   if (page === totalPages - 1 && colophon) text += `\n\n¶ ${formatKJV(colophon)}`;

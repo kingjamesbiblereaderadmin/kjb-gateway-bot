@@ -1066,10 +1066,46 @@ function buildSetupEmbed(guildId) {
   };
 }
 
+// Extract searchable text from a message's content PLUS any embeds it carries —
+// covers link-unfurl embeds, webhook-posted embeds, and Discord "Forward" message snapshots,
+// so a verse reference sitting inside an embed (not just plain text) still gets detected.
+function extractSearchableText(message) {
+  const parts = [message.content || ""];
+
+  const pullEmbed = (embed) => {
+    if (!embed) return;
+    if (embed.title) parts.push(embed.title);
+    if (embed.description) parts.push(embed.description);
+    if (Array.isArray(embed.fields)) {
+      for (const f of embed.fields) {
+        if (f.name) parts.push(f.name);
+        if (f.value) parts.push(f.value);
+      }
+    }
+    if (embed.footer?.text) parts.push(embed.footer.text);
+    if (embed.author?.name) parts.push(embed.author.name);
+  };
+
+  for (const embed of message.embeds || []) pullEmbed(embed);
+
+  // Forwarded messages (Discord "Forward" feature) carry their content in messageSnapshots
+  const snapshots = message.messageSnapshots;
+  if (snapshots) {
+    const list = typeof snapshots.values === "function" ? [...snapshots.values()] : Array.isArray(snapshots) ? snapshots : [];
+    for (const snap of list) {
+      const m = snap.message || snap;
+      if (m?.content) parts.push(m.content);
+      for (const embed of m?.embeds || []) pullEmbed(embed);
+    }
+  }
+
+  return parts.filter(Boolean).join("\n");
+}
+
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   try {
-  const content = message.content;
+  const content = extractSearchableText(message);
   const isMention = message.mentions.users.has(client.user.id);
   const cleaned = content.replace(/<@!?\d+>/g, "").trim();
   const isShort = isMention || cleaned.length <= 80;

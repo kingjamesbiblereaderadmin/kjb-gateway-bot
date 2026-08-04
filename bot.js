@@ -455,19 +455,14 @@ function chunkVerses(verses) {
 
 // Send verse embed(s) — handles large verse sets by splitting into multiple messages
 async function sendVerseEmbeds(target, verses, isFollowUp = false) {
-  const pages = chunkVerses(verses);
-  if (pages.length <= 1) {
+  if (verses.length <= 1) {
     if (isFollowUp) await target.followUp(buildVerseEmbed(verses));
     else await target.reply(buildVerseEmbed(verses));
     return;
   }
-  // Multiple pages: first page as reply, rest as follow-ups
-  for (let i = 0; i < pages.length; i++) {
-    const embed = buildVerseEmbed(pages[i]);
-    // Add page indicator to footer
-    if (embeds_footer_modify(embed, i + 1, pages.length)) {
-      // footer modified inline
-    }
+  // Each verse gets its own message
+  for (let i = 0; i < verses.length; i++) {
+    const embed = buildVerseEmbed([verses[i]]);
     if (i === 0 && !isFollowUp) await target.reply(embed);
     else await target.followUp(embed);
   }
@@ -2208,14 +2203,9 @@ client.on("interactionCreate", async (interaction) => {
     try {
       const verses = (await resolveRefRange(ref)).filter(isValidVerse);
       if (verses.length) {
-        const pages = chunkVerses(verses);
-        if (pages.length <= 1) {
-          await interaction.reply({ ...buildVerseEmbed(verses), flags: 64 });
-        } else {
-          for (let i = 0; i < pages.length; i++) {
-            if (i === 0) await interaction.reply({ ...buildVerseEmbed(pages[i]), flags: 64 });
-            else await interaction.followUp({ ...buildVerseEmbed(pages[i]), flags: 64 });
-          }
+        for (let i = 0; i < verses.length; i++) {
+          if (i === 0) await interaction.reply({ ...buildVerseEmbed([verses[i]]), flags: 64 });
+          else await interaction.followUp({ ...buildVerseEmbed([verses[i]]), flags: 64 });
         }
       } else {
         interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {});

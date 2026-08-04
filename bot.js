@@ -262,6 +262,8 @@ async function resolveRefRange(ref) {
   const parsed = parseRef(ref);
   if (!parsed) return [];
   if (parsed.verseStart && parsed.verseEnd) {
+    const rangeSize = parsed.verseEnd - parsed.verseStart + 1;
+    if (rangeSize > 50) return []; // Cap ranges at 50 verses
     const verses = [];
     for (let v = parsed.verseStart; v <= parsed.verseEnd; v++) {
       try {
@@ -1502,9 +1504,21 @@ client.on("messageCreate", async (message) => {
 
   if (allMatches.length > 1) {
     // Multiple verse references — fetch all and show in one embed
-    if (!isMention && content.length > 150) return;
+    // Allow up to 500-char messages with multi-refs; cap total verses at 50
+    if (!isMention && content.length > 500) return;
     try {
       const allVerses = [];
+      let totalToFetch = 0;
+      for (const m of allMatches) {
+        const vsEnd = m[4] ? parseInt(m[4]) : null;
+        const vsStart = parseInt(m[3]);
+        totalToFetch += vsEnd ? (vsEnd - vsStart + 1) : 1;
+      }
+      const MAX_VERSES = 50;
+      if (totalToFetch > MAX_VERSES) {
+        await message.reply({ content: `❌ That's ${totalToFetch} verses — please limit to ${MAX_VERSES} at a time.`, allowedMentions: { repliedUser: false } });
+        return;
+      }
       for (const m of allMatches) {
         try {
           const book = tryResolveBook(m[1]);
@@ -1569,7 +1583,7 @@ client.on("messageCreate", async (message) => {
 
   // Only skip very long messages that don't contain a valid reference match
   // (the ref was already validated above, so we allow it through)
-  if (!isMention && content.length > 300 && !inlineRef && !parsed) return;
+  if (!isMention && content.length > 500 && !inlineRef && !parsed) return;
 
   try {
     // Verse lookup

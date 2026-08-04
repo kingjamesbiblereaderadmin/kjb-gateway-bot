@@ -1830,24 +1830,6 @@ client.on("interactionCreate", async (interaction) => {
         const q = (focused.value || "").toLowerCase();
         const matches = ALL_BOOKS.filter(b => b.toLowerCase().includes(q)).slice(0, 25);
         await interaction.respond(matches.map(b => ({ name: b, value: b })));
-      } else if (focused.name === "reference") {
-        const q = (focused.value || "").toLowerCase().trim();
-        if (!q) {
-          // Show a few suggestions to get started
-          const suggestions = ["John 3:16", "Psalm 23", "Romans 8:28", "Genesis 1", "1 Corinthians 15:1-4"];
-          await interaction.respond(suggestions.map(s => ({ name: s, value: s })));
-        } else {
-          // Try to match book name prefix, then suggest with chapter/verse
-          const bookMatches = ALL_BOOKS.filter(b => b.toLowerCase().startsWith(q) || b.toLowerCase().includes(q)).slice(0, 20);
-          const choices = [];
-          for (const b of bookMatches) {
-            choices.push({ name: b, value: b });
-            choices.push({ name: `${b} 1`, value: `${b} 1` });
-            choices.push({ name: `${b} 1:1`, value: `${b} 1:1` });
-            if (choices.length >= 23) break;
-          }
-          await interaction.respond(choices.slice(0, 25));
-        }
       } else {
         await interaction.respond([]);
       }

@@ -21,7 +21,7 @@ const commands = [
     name: "read",
     description: "Look up a verse, range, or chapter — leave blank for the table of contents",
     options: [
-      { name: "reference", description: "e.g. John 3:16, Psalm 23, 1 Corinthians 15:1-4", type: 3, required: false, autocomplete: true },
+      { name: "reference", description: "e.g. John 3:16, Psalm 23, 1 Corinthians 15:1-4", type: 3, required: false },
     ],
     ...PUBLIC,
   },

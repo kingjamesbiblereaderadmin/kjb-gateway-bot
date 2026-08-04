@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, PermissionsBitField, ModalBuilder, TextInputBuilder } from "discord.js";
+import { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, PermissionsBitField, ModalBuilder, TextInputBuilder, AttachmentBuilder } from "discord.js";
 import cron from "node-cron";
 import fs from "fs";
 import path from "path";
@@ -298,7 +298,43 @@ function isValidVerse(v) {
   return v && v.text != null && v.book != null && v.chapter != null && v.verse != null;
 }
 
-function buildVerseEmbed(verses) {
+// ---- In-memory cache for paginated verse embeds (keyed by short id, referenced from button customIds) ----
+// Bounded FIFO — oldest entries evicted once the cache grows past MAX_ENTRIES so long-running
+// processes don't leak memory. Entries are cheap (just text), so a modest cap is fine.
+const verseEmbedCache = new Map();
+const VERSE_CACHE_MAX = 300;
+function cacheVerseEmbed(entry) {
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  verseEmbedCache.set(id, entry);
+  if (verseEmbedCache.size > VERSE_CACHE_MAX) {
+    const oldest = verseEmbedCache.keys().next().value;
+    verseEmbedCache.delete(oldest);
+  }
+  return id;
+}
+
+// Packs an array of text blocks into pages under a character budget, WITHOUT ever splitting
+// a block (verse/group) in the middle — each page is a valid, complete chunk of text.
+function paginateBlocks(blocks, budget = 3900) {
+  const pages = [];
+  let current = [];
+  let currentLen = 0;
+  for (const block of blocks) {
+    const addedLen = block.length + (current.length ? 2 : 0); // +2 for the "\n\n" joiner
+    if (current.length && currentLen + addedLen > budget) {
+      pages.push(current.join("\n\n"));
+      current = [block];
+      currentLen = block.length;
+    } else {
+      current.push(block);
+      currentLen += addedLen;
+    }
+  }
+  if (current.length) pages.push(current.join("\n\n"));
+  return pages.length ? pages : [""];
+}
+
+function buildVerseEmbed(verses, page = 0, cacheId = null) {
   const valid = verses.filter(isValidVerse);
   if (!valid.length) return { embeds: [], components: [] };
   const first = valid[0], last = valid[valid.length - 1];
@@ -325,32 +361,34 @@ function buildVerseEmbed(verses) {
     groups.push(curGroup);
   }
   
-  let title, desc;
+  let title, blocks;
   
   if (sameBook && sameChapter && valid.length > 1) {
     // Dash range in same chapter (e.g., John 3:16-18) — show verses TOGETHER
     title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
-    desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
-    desc += verses.map(v => {
+    blocks = [];
+    if (first.verse === 1 && first.superscription) blocks.push(`¶ ${formatKJV(first.superscription)}`);
+    blocks.push(...verses.map(v => {
       const heading = v.heading ? `**${v.heading}**\n` : "";
       return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
-    }).join("\n\n");
+    }));
   } else if (valid.length === 1) {
     // Single verse
     title = `${fullTitle} — ${first.chapter}:${first.verse}`;
-    desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
-    desc += `"${formatKJV(valid[0].text)}"`;
+    blocks = [];
+    if (first.verse === 1 && first.superscription) blocks.push(`¶ ${formatKJV(first.superscription)}`);
+    blocks.push(`"${formatKJV(valid[0].text)}"`);
   } else if (sameBook && !sameChapter) {
     // Same book, different chapters
     title = fullTitle;
-    desc = verses.map(v => {
+    blocks = verses.map(v => {
       const heading = v.heading ? `**${v.heading}**\n` : "";
       return `${heading}**${v.chapter}:${v.verse}**\n"${formatKJV(v.text)}"`;
-    }).join("\n\n");
+    });
   } else {
     // Multiple books or refs (e.g., 1 Cor 15:1-4, Romans 3:25, Eph 1:13)
     title = "Multiple Verses";
-    desc = groups.map(g => {
+    blocks = groups.map(g => {
       const gTitle = KJV_FULL_TITLES[g[0].book] || g[0].book;
       if (g.length === 1) {
         return `**${gTitle} — ${g[0].chapter}:${g[0].verse}**\n"${formatKJV(g[0].text)}"`;
@@ -362,13 +400,18 @@ function buildVerseEmbed(verses) {
         }).join("\n\n");
         return `**${gTitle} — ${ref}**\n${text}`;
       }
-    }).join("\n\n");
+    });
   }
-  
-  if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
+
+  // Paginate — never truncate/drop content. Most lookups fit on one page (no pagination UI shown).
+  const pages = paginateBlocks(blocks);
+  const totalPages = pages.length;
+  const curPage = Math.min(Math.max(page, 0), totalPages - 1);
+  const desc = pages[curPage];
+  const pagedTitle = totalPages > 1 ? `${title} (${curPage + 1}/${totalPages})` : title;
 
   const embed = new EmbedBuilder()
-    .setTitle(`📖 ${title}`)
+    .setTitle(`📖 ${pagedTitle}`)
     .setDescription(desc)
     .setColor(0xC8922E)
     .setThumbnail(KJB_LOGO)
@@ -429,78 +472,20 @@ function buildVerseEmbed(verses) {
     }
   }
 
+  // Pagination + full-text download row — only shown when content actually spans multiple pages.
+  if (totalPages > 1) {
+    if (!cacheId) {
+      const fullText = `${title}\n\n${blocks.join("\n\n")}`;
+      cacheId = cacheVerseEmbed({ verses, fullText, title });
+    }
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`vspg|${cacheId}|${curPage - 1}`).setStyle(ButtonStyle.Primary).setLabel("◀ Page").setDisabled(curPage === 0),
+      new ButtonBuilder().setCustomId(`vspg|${cacheId}|${curPage + 1}`).setStyle(ButtonStyle.Primary).setLabel("Page ▶").setDisabled(curPage >= totalPages - 1),
+      new ButtonBuilder().setCustomId(`vsfile|${cacheId}`).setStyle(ButtonStyle.Secondary).setLabel("📄 Full Text (.txt)"),
+    ));
+  }
+
   return { embeds: [embed], components: rows };
-}
-
-// Split verses into page-sized chunks where each page's description stays under 3800 chars
-function chunkVerses(verses) {
-  if (verses.length <= 1) return [verses];
-  const pages = [];
-  let cur = [];
-  let curLen = 0;
-  for (const v of verses) {
-    // Estimate length: ref + text + formatting overhead
-    const estLen = (v.ref || `${v.book} ${v.chapter}:${v.verse}`).length + (v.text || "").length + 30;
-    if (curLen + estLen > 3800 && cur.length > 0) {
-      pages.push(cur);
-      cur = [];
-      curLen = 0;
-    }
-    cur.push(v);
-    curLen += estLen;
-  }
-  if (cur.length) pages.push(cur);
-  return pages;
-}
-
-// Send verse embed(s) — handles large verse sets by splitting into multiple messages
-// Group verses into contiguous ranges (same book+chapter, consecutive verse numbers)
-// Each group becomes one message; separate refs get their own messages
-function groupContiguousVerses(verses) {
-  if (verses.length <= 1) return [verses];
-  const groups = [];
-  let cur = [verses[0]];
-  for (let i = 1; i < verses.length; i++) {
-    const prev = verses[i - 1];
-    const v = verses[i];
-    const contiguous = v.book === prev.book && v.chapter === prev.chapter && v.verse === prev.verse + 1;
-    if (contiguous) {
-      cur.push(v);
-    } else {
-      groups.push(cur);
-      cur = [v];
-    }
-  }
-  if (cur.length) groups.push(cur);
-  return groups;
-}
-
-async function sendVerseEmbeds(target, verses, isFollowUp = false) {
-  if (verses.length <= 1) {
-    if (isFollowUp) await target.followUp(buildVerseEmbed(verses));
-    else await target.reply(buildVerseEmbed(verses));
-    return;
-  }
-  // Group contiguous verses (ranges) together; non-contiguous get own messages
-  const groups = groupContiguousVerses(verses);
-  for (let i = 0; i < groups.length; i++) {
-    const embed = buildVerseEmbed(groups[i]);
-    if (i === 0 && !isFollowUp) await target.reply(embed);
-    else await target.followUp(embed);
-  }
-}
-
-// Helper to add page indicator to embed footer
-function embeds_footer_modify(embed, page, total) {
-  if (total <= 1) return false;
-  const e = embed.embeds?.[0];
-  if (e) {
-    const oldFooter = e.data?.footer?.text || "KJB Reader • kingjamesbiblereader.com";
-    if (!oldFooter.includes("Page")) {
-      e.setFooter({ text: `${oldFooter} • Page ${page} of ${total}` });
-    }
-  }
-  return true;
 }
 
 // Chapter embed — already matches V3, keeping as-is
@@ -1568,7 +1553,7 @@ client.on("messageCreate", async (message) => {
       
       const validDeduped = deduped.filter(isValidVerse);
       if (validDeduped.length) {
-        await sendVerseEmbeds(message, validDeduped);
+        await message.reply(buildVerseEmbed(validDeduped));
       } else {
         await message.reply({ content: "❌ Verses not found.", allowedMentions: { repliedUser: false } });
       }
@@ -1616,7 +1601,7 @@ client.on("messageCreate", async (message) => {
       const results = await Promise.all(refs.map(r => callBibleApi({ action: "resolve_refs", refs: [r] }).then(d => d?.verses?.[0]).catch(() => null)));
       const verses = results.filter(isValidVerse);
       if (verses.length) {
-        await sendVerseEmbeds(message, verses);
+        await message.reply(buildVerseEmbed(verses));
       } else {
         await message.reply({ content: `❌ "${refText}" not found in the KJB.`, allowedMentions: { repliedUser: false } });
       }
@@ -1841,7 +1826,7 @@ client.on("interactionCreate", async (interaction) => {
         }
         if (parsed.verseStart) {
           const verses = (await resolveRefRange(refText)).filter(isValidVerse);
-          if (verses.length) await sendVerseEmbeds(interaction, verses);
+          if (verses.length) await interaction.reply(buildVerseEmbed(verses));
           else await interaction.reply({ content: `❌ "${refText}" not found in the KJB.`, flags: 64 });
         } else {
           const data = await callBibleApi({ action: "getChapter", book: parsed.book, chapter: parsed.chapter });
@@ -2219,17 +2204,42 @@ client.on("interactionCreate", async (interaction) => {
     return;
   }
 
+  // Verse embed pagination (long verse ranges / multi-refs that don't fit in one embed)
+  if (customId.startsWith("vspg|")) {
+    const parts = customId.slice("vspg|".length).split("|");
+    const cacheId = parts[0];
+    const page = parseInt(parts[1]) || 0;
+    const entry = verseEmbedCache.get(cacheId);
+    if (!entry) {
+      return interaction.reply({ content: "❌ This lookup expired — please run the verse command again.", flags: 64 }).catch(() => {});
+    }
+    try {
+      await interaction.update(buildVerseEmbed(entry.verses, page, cacheId));
+    } catch (e) { console.error("vspg:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
+    return;
+  }
+
+  // Download the full passage as a .txt file (shown when a verse lookup spans multiple pages)
+  if (customId.startsWith("vsfile|")) {
+    const cacheId = customId.slice("vsfile|".length);
+    const entry = verseEmbedCache.get(cacheId);
+    if (!entry) {
+      return interaction.reply({ content: "❌ This lookup expired — please run the verse command again.", flags: 64 }).catch(() => {});
+    }
+    try {
+      const attachment = new AttachmentBuilder(Buffer.from(entry.fullText, "utf-8"), { name: `${entry.title.replace(/[^\w\- ]/g, "").slice(0, 60) || "verses"}.txt` });
+      await interaction.reply({ files: [attachment], flags: 64 });
+    } catch (e) { console.error("vsfile:", e.message); interaction.reply({ content: "❌ Error generating file.", flags: 64 }).catch(() => {}); }
+    return;
+  }
+
   // Open verse from search results / multi-ref group buttons
   if (customId.startsWith("openverse|")) {
     const ref = customId.slice("openverse|".length);
     try {
       const verses = (await resolveRefRange(ref)).filter(isValidVerse);
       if (verses.length) {
-        const groups = groupContiguousVerses(verses);
-        for (let i = 0; i < groups.length; i++) {
-          if (i === 0) await interaction.reply({ ...buildVerseEmbed(groups[i]), flags: 64 });
-          else await interaction.followUp({ ...buildVerseEmbed(groups[i]), flags: 64 });
-        }
+        await interaction.reply({ ...buildVerseEmbed(verses), flags: 64 });
       } else {
         interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {});
       }

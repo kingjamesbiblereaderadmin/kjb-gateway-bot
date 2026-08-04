@@ -315,7 +315,10 @@ function buildVerseEmbed(verses) {
     // Dash range in same chapter (e.g., John 3:16-18) — show verses TOGETHER
     title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
     desc = (first.verse === 1 && first.superscription) ? `¶ ${formatKJV(first.superscription)}\n\n` : "";
-    desc += verses.map(v => `[${v.verse}] ${formatKJV(v.text)}`).join("\n\n");
+    desc += verses.map(v => {
+      const heading = v.heading ? `**${v.heading}.**\n` : "";
+      return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
+    }).join("\n\n");
   } else if (valid.length === 1) {
     // Single verse
     title = `${fullTitle} — ${first.chapter}:${first.verse}`;
@@ -324,7 +327,10 @@ function buildVerseEmbed(verses) {
   } else if (sameBook && !sameChapter) {
     // Same book, different chapters
     title = fullTitle;
-    desc = verses.map(v => `**${v.chapter}:${v.verse}**\n"${formatKJV(v.text)}"`).join("\n\n");
+    desc = verses.map(v => {
+      const heading = v.heading ? `**${v.heading}.**\n` : "";
+      return `${heading}**${v.chapter}:${v.verse}**\n"${formatKJV(v.text)}"`;
+    }).join("\n\n");
   } else {
     // Multiple books or refs (e.g., 1 Cor 15:1-4, Romans 3:25, Eph 1:13)
     title = "Multiple Verses";
@@ -334,7 +340,10 @@ function buildVerseEmbed(verses) {
         return `**${gTitle} — ${g[0].chapter}:${g[0].verse}**\n"${formatKJV(g[0].text)}"`;
       } else {
         const ref = `${g[0].chapter}:${g[0].verse}–${g[g.length - 1].verse}`;
-        const text = g.map(v => `[${v.verse}] ${formatKJV(v.text)}`).join("\n\n");
+        const text = g.map(v => {
+          const heading = v.heading ? `**${v.heading}.**\n` : "";
+          return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
+        }).join("\n\n");
         return `**${gTitle} — ${ref}**\n${text}`;
       }
     }).join("\n\n");
@@ -472,7 +481,10 @@ function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page =
   if (page === 0 && verses[0]?.verse === 1 && verses[0]?.superscription) {
     text += `¶ ${formatKJV(verses[0].superscription)}\n\n`;
   }
-  text += pageVerses.map(v => `[${v.verse}] ${formatKJV(v.text)}`).join("\n\n");
+  text += pageVerses.map(v => {
+    const heading = v.heading ? `**${v.heading}.**\n` : "";
+    return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
+  }).join("\n\n");
   if (page === totalPages - 1 && colophon) text += `\n\n¶ ${formatKJV(colophon)}`;
   if (text.length > 4000) text = text.slice(0, 3997) + "...";
 

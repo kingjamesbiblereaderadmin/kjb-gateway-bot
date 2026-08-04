@@ -1427,26 +1427,27 @@ client.on("messageCreate", async (message) => {
   const parsed = parseRef(refText);
 
   // Also try matching a single reference anywhere in the message (inline detection)
+  // Uses matchAll with the global regex to get proper capture groups
   let inlineRef = null;
   if (!parsed) {
-    const inlineMatch = content.match(multiRefPattern);
-    if (inlineMatch) {
-      const m = inlineMatch[0];
-      const book = resolveBook(m[1] || m);
-      if (book) {
-        const chapter = parseInt(m[2]);
-        if (KJV_BOOKS[book] && chapter >= 1 && chapter <= KJV_BOOKS[book]) {
-          inlineRef = { book, chapter, verseStart: parseInt(m[3]), verseEnd: m[4] ? parseInt(m[4]) : null };
-        }
-      }
+    const inlineMatches = [...content.matchAll(multiRefPattern)].filter(m => {
+      const book = resolveBook(m[1]);
+      return book && KJV_BOOKS[book] && parseInt(m[2]) >= 1 && parseInt(m[2]) <= KJV_BOOKS[book];
+    });
+    if (inlineMatches.length) {
+      const m = inlineMatches[0]; // take the first valid match
+      const book = resolveBook(m[1]);
+      const chapter = parseInt(m[2]);
+      inlineRef = { book, chapter, verseStart: parseInt(m[3]), verseEnd: m[4] ? parseInt(m[4]) : null };
     }
   }
 
   const ref = parsed || inlineRef;
   if (!ref) return;
 
-  // Ignore if message is too long (probably not a Bible reference query)
-  if (!isMention && content.length > 100) return;
+  // Only skip very long messages that don't contain a valid reference match
+  // (the ref was already validated above, so we allow it through)
+  if (!isMention && content.length > 300 && !inlineRef && !parsed) return;
 
   try {
     // Verse lookup

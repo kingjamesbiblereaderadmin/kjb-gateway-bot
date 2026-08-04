@@ -1512,7 +1512,7 @@ client.on("messageCreate", async (message) => {
   
   // Check for multiple references separated by commas or semicolons
   // e.g. "John 3:16, Romans 5:8" or "John 3:16; Romans 5:8; Rev 3:20"
-  const multiRefPattern = /\b((?:[123]\s*)?[A-Za-z]{2,}(?:\s[A-Za-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?\b/g;
+  const multiRefPattern = /\b((?:[123]\s*)?[A-Za-z]{2,}(?:\s[A-Za-z]+)?)\s+(\d+):(\d+)(?:([,-])(\d+))?\b/g;
   const allMatches = [...content.matchAll(multiRefPattern)].filter(m => {
     const book = tryResolveBook(m[1]);
     return book && KJV_BOOKS[book] && parseInt(m[2]) >= 1 && parseInt(m[2]) <= KJV_BOOKS[book];
@@ -1520,8 +1520,8 @@ client.on("messageCreate", async (message) => {
 
   if (allMatches.length > 1) {
     // Multiple verse references — fetch all and show in one embed
-    // Allow up to 500-char messages with multi-refs; cap total verses at 50
-    if (!isMention && content.length > 500) return;
+    // Allow up to 5000-char messages with multi-refs; cap total verses at 200
+    if (!isMention && content.length > 5000) return;
     try {
       // Build all refs and fetch in parallel batches
       const allRefs = [];
@@ -1529,9 +1529,17 @@ client.on("messageCreate", async (message) => {
         const book = tryResolveBook(m[1]);
         const chapter = parseInt(m[2]);
         const vsStart = parseInt(m[3]);
-        const vsEnd = m[4] ? parseInt(m[4]) : null;
+        const delim = m[4]; // '-' = range, ',' = specific verses
+        const vsEnd = m[5] ? parseInt(m[5]) : null;
         if (vsEnd) {
-          for (let v = vsStart; v <= vsEnd; v++) allRefs.push(`${book} ${chapter}:${v}`);
+          if (delim === '-') {
+            // Dash range: fetch all verses from start to end
+            for (let v = vsStart; v <= vsEnd; v++) allRefs.push(`${book} ${chapter}:${v}`);
+          } else {
+            // Comma: fetch just the two specific verses
+            allRefs.push(`${book} ${chapter}:${vsStart}`);
+            allRefs.push(`${book} ${chapter}:${vsEnd}`);
+          }
         } else {
           allRefs.push(`${book} ${chapter}:${vsStart}`);
         }
@@ -1587,7 +1595,7 @@ client.on("messageCreate", async (message) => {
 
   // Only skip very long messages that don't contain a valid reference match
   // (the ref was already validated above, so we allow it through)
-  if (!isMention && content.length > 500 && !inlineRef && !parsed) return;
+  if (!isMention && content.length > 5000 && !inlineRef && !parsed) return;
 
   try {
     // Verse lookup

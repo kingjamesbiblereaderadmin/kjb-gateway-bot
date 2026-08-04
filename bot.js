@@ -191,6 +191,20 @@ function resolveBook(input) {
   return null;
 }
 
+// Try to resolve a book name, progressively trimming leading words
+// e.g. "does John" -> "John", "explain Romans" -> "Romans"
+function tryResolveBook(rawBook) {
+  let book = resolveBook(rawBook);
+  if (book) return book;
+  const parts = rawBook.split(/\s+/);
+  for (let i = 1; i < parts.length; i++) {
+    const trimmed = parts.slice(i).join(" ");
+    book = resolveBook(trimmed);
+    if (book) return book;
+  }
+  return null;
+}
+
 function parseRef(text) {
   const m = text.trim().match(/^((?:[123]\s*)?[A-Za-z][A-Za-z\s]*?)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$/);
   if (!m) return null;
@@ -1374,7 +1388,7 @@ client.on("messageCreate", async (message) => {
   // e.g. "John 3:16, Romans 5:8" or "John 3:16; Romans 5:8; Rev 3:20"
   const multiRefPattern = /\b((?:[123]\s*)?[A-Za-z]{2,}(?:\s[A-Za-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?\b/g;
   const allMatches = [...content.matchAll(multiRefPattern)].filter(m => {
-    const book = resolveBook(m[1]);
+    const book = tryResolveBook(m[1]);
     return book && KJV_BOOKS[book] && parseInt(m[2]) >= 1 && parseInt(m[2]) <= KJV_BOOKS[book];
   });
 
@@ -1385,7 +1399,7 @@ client.on("messageCreate", async (message) => {
       const allVerses = [];
       for (const m of allMatches) {
         try {
-          const book = resolveBook(m[1]);
+          const book = tryResolveBook(m[1]);
           const chapter = parseInt(m[2]);
           const vsStart = parseInt(m[3]);
           const vsEnd = m[4] ? parseInt(m[4]) : null;
@@ -1431,12 +1445,12 @@ client.on("messageCreate", async (message) => {
   let inlineRef = null;
   if (!parsed) {
     const inlineMatches = [...content.matchAll(multiRefPattern)].filter(m => {
-      const book = resolveBook(m[1]);
+      const book = tryResolveBook(m[1]);
       return book && KJV_BOOKS[book] && parseInt(m[2]) >= 1 && parseInt(m[2]) <= KJV_BOOKS[book];
     });
     if (inlineMatches.length) {
       const m = inlineMatches[0]; // take the first valid match
-      const book = resolveBook(m[1]);
+      const book = tryResolveBook(m[1]);
       const chapter = parseInt(m[2]);
       inlineRef = { book, chapter, verseStart: parseInt(m[3]), verseEnd: m[4] ? parseInt(m[4]) : null };
     }

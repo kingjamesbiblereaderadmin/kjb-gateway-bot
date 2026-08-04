@@ -990,6 +990,7 @@ client.on("messageCreate", async (message) => {
         "• `1 Corinthians 15:1-4` — Verse range",
         "",
         "**Or just type a command:**",
+        "• `read John 3:16` — Same as typing the reference directly",
         "• `daily` — Today's verse",
         "• `random` — Random verse",
         "• `random chapter` — Random chapter",
@@ -1360,8 +1361,14 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // Try to parse as Bible reference(s) — supports comma/semicolon separated multi-ref
+  // "read" prefix — treat as a verse/chapter reference (alias for just typing the reference)
   let refText = text;
+  if (isShort && /^read\s+/i.test(text)) {
+    const stripped = cleaned.replace(/^read\s+/i, "").trim();
+    if (stripped) refText = stripped.toLowerCase();
+  }
+
+  // Try to parse as Bible reference(s) — supports comma/semicolon separated multi-ref
   
   // Check for multiple references separated by commas or semicolons
   // e.g. "John 3:16, Romans 5:8" or "John 3:16; Romans 5:8; Rev 3:20"

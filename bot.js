@@ -369,7 +369,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     blocks = [];
     if (first.verse === 1 && first.superscription) blocks.push(`¶ ${formatKJV(first.superscription)}`);
     blocks.push(...verses.map(v => {
-      const heading = v.heading ? `\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
+      const heading = v.heading ? `\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
       return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
     }));
   } else if (valid.length === 1) {
@@ -382,7 +382,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     // Same book, different chapters
     title = fullTitle;
     blocks = verses.map(v => {
-      const heading = v.heading ? `\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
+      const heading = v.heading ? `\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
       return `${heading}**${v.chapter}:${v.verse}**\n"${formatKJV(v.text)}"`;
     });
   } else {
@@ -395,7 +395,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
       } else {
         const ref = `${g[0].chapter}:${g[0].verse}–${g[g.length - 1].verse}`;
         const text = g.map(v => {
-          const heading = v.heading ? `\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
+          const heading = v.heading ? `\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
           return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
         }).join("\n\n");
         return `**${gTitle} — ${ref}**\n${text}`;
@@ -500,7 +500,7 @@ function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page =
     text += `¶ ${formatKJV(verses[0].superscription)}\n\n`;
   }
   text += pageVerses.map(v => {
-    const heading = v.heading ? `\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
+    const heading = v.heading ? `\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
     return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
   }).join("\n\n");
   if (page === totalPages - 1 && colophon) text += `\n\n¶ ${formatKJV(colophon)}`;

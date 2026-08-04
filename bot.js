@@ -1116,8 +1116,11 @@ client.on("messageCreate", async (message) => {
       } else {
         // Smart multi-word: fetch only the rarest word fully, then text-match the rest
         const firstPages = await Promise.all(words.map(w =>
-          callBibleApi({ action: "search", query: w, offset: 0, wholeWord })
+          callBibleApi({ action: "search", query: w, offset: 0, wholeWord }).catch(() => null)
         ));
+        if (firstPages.some(p => !p || !p.total)) {
+          results = { total: 0, verses: [] };
+        } else {
         let minIdx = 0;
         for (let i = 1; i < words.length; i++) {
           if ((firstPages[i]?.total || 0) < (firstPages[minIdx]?.total || 0)) minIdx = i;
@@ -1131,12 +1134,14 @@ client.on("messageCreate", async (message) => {
           baseResults.push(...batch);
         }
         const otherWords = words.filter((_, i) => i !== minIdx);
+        const otherRegexes = otherWords.map(w => new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i"));
         let intersected = baseResults.filter(v => {
           const text = (v.text || "").toLowerCase();
-          return otherWords.every(w => text.includes(w));
+          return otherRegexes.every(re => re.test(text));
         });
         intersected = filterTestament(intersected);
         results = { total: intersected.length, verses: intersected };
+        }
       }
       if (!results.total) {
         let hint = "";
@@ -1816,8 +1821,12 @@ client.on("interactionCreate", async (interaction) => {
           // Smart multi-word: fetch only the rarest word fully, then text-match the rest
           // 1) Get total counts for each word via first page
           const firstPages = await Promise.all(words.map(w =>
-            callBibleApi({ action: "search", query: w, offset: 0, wholeWord })
+            callBibleApi({ action: "search", query: w, offset: 0, wholeWord }).catch(() => null)
           ));
+          // If any word has 0 results, no intersection possible
+          if (firstPages.some(p => !p || !p.total)) {
+            results = { total: 0, verses: [] };
+          } else {
           // Find rarest word (fewest total results)
           let minIdx = 0;
           for (let i = 1; i < words.length; i++) {
@@ -1832,15 +1841,17 @@ client.on("interactionCreate", async (interaction) => {
             if (!batch.length) break;
             baseResults.push(...batch);
           }
-          // 3) Build list of other words to check in verse text
+          // 3) Build list of other words to check in verse text (word-boundary match)
           const otherWords = words.filter((_, i) => i !== minIdx);
+          const otherRegexes = otherWords.map(w => new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i"));
           // 4) Filter base results: verse text must contain all other words
           let intersected = baseResults.filter(v => {
             const text = (v.text || "").toLowerCase();
-            return otherWords.every(w => text.includes(w));
+            return otherRegexes.every(re => re.test(text));
           });
           intersected = filterTestament(intersected);
           results = { total: intersected.length, verses: intersected };
+          }
         }
         console.log(`[search] results: total=${results.total} verses=${results.verses.length}`);
         if (!results.total) {

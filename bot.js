@@ -383,7 +383,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     title = fullTitle;
     blocks = verses.map(v => {
       const heading = v.heading ? `\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
-      return `${heading}**${v.chapter}:${v.verse}**\n"${formatKJV(v.text)}"`;
+      return `${heading}**${v.chapter}:${v.verse}**\n\n"${formatKJV(v.text)}"`;
     });
   } else {
     // Multiple books or refs (e.g., 1 Cor 15:1-4, Romans 3:25, Eph 1:13)
@@ -391,14 +391,14 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     blocks = groups.map(g => {
       const gTitle = KJV_FULL_TITLES[g[0].book] || g[0].book;
       if (g.length === 1) {
-        return `**${gTitle} — ${g[0].chapter}:${g[0].verse}**\n"${formatKJV(g[0].text)}"`;
+        return `**${gTitle} — ${g[0].chapter}:${g[0].verse}**\n\n"${formatKJV(g[0].text)}"`;
       } else {
         const ref = `${g[0].chapter}:${g[0].verse}–${g[g.length - 1].verse}`;
         const text = g.map(v => {
           const heading = v.heading ? `\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
           return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
         }).join("\n\n");
-        return `**${gTitle} — ${ref}**\n${text}`;
+        return `**${gTitle} — ${ref}**\n\n${text}`;
       }
     });
   }
@@ -674,7 +674,7 @@ function buildSearchEmbed(query, keywords, total, verses, page) {
   const show = verses.slice(start, start + perPage);
   let desc = show.map(v => {
     const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
-    return `**${ref}**\n${highlightKeywords(v.text, keywords)}`;
+    return `**${ref}**\n\n${highlightKeywords(v.text, keywords)}`;
   }).join("\n\n");
   if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
 

@@ -2203,23 +2203,30 @@ client.on("interactionCreate", async (interaction) => {
         const sliceStart = (page * 5) - off;
         verses = allResults.slice(sliceStart, sliceStart + 5);
       } else {
-        // Multi-word intersection
-        const allSets = await Promise.all(words.map(async w => {
-          const all = [];
-          for (let o = 0; o < 1000; o += 100) {
-            const d = await callBibleApi({ action: "search", query: w, offset: o });
-            const batch = d?.results || [];
-            if (!batch.length) break;
-            all.push(...batch);
-          }
-          return all;
-        }));
+        // Smart multi-word: same approach as initial search
+        const firstPages = await Promise.all(words.map(w =>
+          callBibleApi({ action: "search", query: w, offset: 0 }).catch(() => null)
+        ));
+        if (firstPages.some(p => !p || !p.total)) {
+          return interaction.editReply({ content: "❌ No results.", embeds: [], components: [] });
+        }
         let minIdx = 0;
-        for (let i = 1; i < allSets.length; i++) { if (allSets[i].length < allSets[minIdx].length) minIdx = i; }
-        const otherSets = allSets.filter((_, i) => i !== minIdx).map(s => new Set(s.map(v => v.ref || `${v.book} ${v.chapter}:${v.verse}`)));
-        verses = allSets[minIdx].filter(v => {
-          const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
-          return otherSets.every(s => s.has(ref));
+        for (let i = 1; i < words.length; i++) {
+          if ((firstPages[i]?.total || 0) < (firstPages[minIdx]?.total || 0)) minIdx = i;
+        }
+        const baseResults = [...(firstPages[minIdx]?.results || [])];
+        const totalCount = firstPages[minIdx]?.total || 0;
+        for (let off = 100; off < totalCount && off < 5000; off += 100) {
+          const d = await callBibleApi({ action: "search", query: words[minIdx], offset: off });
+          const batch = d?.results || [];
+          if (!batch.length) break;
+          baseResults.push(...batch);
+        }
+        const otherWords = words.filter((_, i) => i !== minIdx);
+        const otherRegexes = otherWords.map(w => new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i"));
+        verses = baseResults.filter(v => {
+          const text = (v.text || "").toLowerCase();
+          return otherRegexes.every(re => re.test(text));
         });
         total = verses.length;
       }

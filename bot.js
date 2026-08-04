@@ -1748,19 +1748,31 @@ client.on("interactionCreate", async (interaction) => {
 
       if (commandName === "search") {
         const query = interaction.options.getString("keyword")?.trim();
+        const testament = interaction.options.getString("testament"); // "OT" or "NT"
+        const matchMode = interaction.options.getString("match"); // "whole" or "partial"
         if (!query) { await interaction.reply({ content: "❌ Please provide a keyword.", flags: 64 }); return; }
         await interaction.deferReply();
+        const wholeWord = matchMode === "whole";
         const words = query.toLowerCase().split(/[,;\s]+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
         if (!words.length) { await interaction.editReply({ content: "❌ Please provide a keyword." }); return; }
+        
+        // Use existing OT_SET for client-side testament filtering
+        function filterTestament(verses) {
+          if (!testament) return verses;
+          return verses.filter(v => testament === "OT" ? OT_SET.has(v.book) : !OT_SET.has(v.book));
+        }
+        
         let results;
         if (words.length === 1) {
-          const searchData = await callBibleApi({ action: "search", query: words[0], offset: 0 });
-          results = { total: searchData?.total || 0, verses: searchData?.results || [] };
+          const searchData = await callBibleApi({ action: "search", query: words[0], offset: 0, wholeWord });
+          let verses = searchData?.results || [];
+          verses = filterTestament(verses);
+          results = { total: verses.length, verses };
         } else {
           const allSets = await Promise.all(words.map(async w => {
             const all = [];
             for (let off = 0; off < 1000; off += 100) {
-              const d = await callBibleApi({ action: "search", query: w, offset: off });
+              const d = await callBibleApi({ action: "search", query: w, offset: off, wholeWord });
               const batch = d?.results || [];
               if (!batch.length) break;
               all.push(...batch);
@@ -1770,17 +1782,22 @@ client.on("interactionCreate", async (interaction) => {
           let minIdx = 0;
           for (let i = 1; i < allSets.length; i++) { if (allSets[i].length < allSets[minIdx].length) minIdx = i; }
           const otherSets = allSets.filter((_, i) => i !== minIdx).map(s => new Set(s.map(v => v.ref || `${v.book} ${v.chapter}:${v.verse}`)));
-          results = {
-            total: 0,
-            verses: allSets[minIdx].filter(v => {
-              const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
-              return otherSets.every(s => s.has(ref));
-            })
-          };
-          results.total = results.verses.length;
+          let intersected = allSets[minIdx].filter(v => {
+            const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
+            return otherSets.every(s => s.has(ref));
+          });
+          intersected = filterTestament(intersected);
+          results = { total: intersected.length, verses: intersected };
         }
-        if (!results.total) { await interaction.editReply({ content: `❌ No verses found for "**${query}**".` }); return; }
-        await interaction.editReply(buildSearchEmbed(query, words, results.total, results.verses, 0));
+        if (!results.total) {
+          let hint = "";
+          if (testament) hint += ` in the ${testament === "OT" ? "Old" : "New"} Testament`;
+          if (wholeWord) hint += " (whole word match)";
+          await interaction.editReply({ content: `❌ No verses found for "**${query}**"${hint}.` });
+          return;
+        }
+        const searchTitle = `${query}${testament ? ` (${testament === "OT" ? "Old" : "New"} Testament)` : ""}${wholeWord ? " · whole word" : ""}`;
+        await interaction.editReply(buildSearchEmbed(searchTitle, words, results.total, results.verses, 0));
         return;
       }
 

@@ -40,6 +40,26 @@ const commands = [
     description: "Search verses by keyword",
     options: [
       { name: "keyword", description: "Word(s) to search for", type: 3, required: true },
+      {
+        name: "testament",
+        description: "Filter by testament",
+        type: 3,
+        required: false,
+        choices: [
+          { name: "Old Testament", value: "OT" },
+          { name: "New Testament", value: "NT" },
+        ],
+      },
+      {
+        name: "match",
+        description: "Match mode (default: partial)",
+        type: 3,
+        required: false,
+        choices: [
+          { name: "Whole word only", value: "whole" },
+          { name: "Partial match", value: "partial" },
+        ],
+      },
     ],
     ...PUBLIC,
   },

@@ -31,6 +31,15 @@ const commands = [
     options: [
       { name: "type", description: "Verse or chapter", type: 3, required: false,
         choices: [{ name: "Verse", value: "verse" }, { name: "Chapter", value: "chapter" }] },
+      {
+        name: "testament",
+        description: "Filter by testament (verse only)",
+        type: 3, required: false,
+        choices: [
+          { name: "Old Testament", value: "OT" },
+          { name: "New Testament", value: "NT" },
+        ],
+      },
     ],
     ...PUBLIC,
   },

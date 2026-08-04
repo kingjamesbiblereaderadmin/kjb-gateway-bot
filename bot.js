@@ -1044,10 +1044,14 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // Random verse
-  if (isShort && /^random\s*$/i.test(text)) {
+  // Random verse (supports optional testament: "random ot" / "random nt")
+  if (isShort && /^random\s*(ot|nt|old|new)?\s*$/i.test(text)) {
     try {
-      const data = await callBibleApi({ action: "random_verse" });
+      const testamentMatch = text.match(/^random\s+(ot|nt|old|new)\s*$/i);
+      const testament = testamentMatch ? (testamentMatch[1].toUpperCase().startsWith("O") || testamentMatch[1].toUpperCase() === "OT" ? "OT" : "NT") : null;
+      const apiParams = { action: "random_verse" };
+      if (testament) apiParams.testament = testament;
+      const data = await callBibleApi(apiParams);
       if (data?.verse) {
         await message.reply(buildVerseEmbed([data.verse]));
       }
@@ -1055,10 +1059,13 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // Random chapter
-  if (isShort && /^random\s+chapter\s*$/i.test(text)) {
+  // Random chapter (supports optional testament: "random chapter ot" / "random chapter nt")
+  if (isShort && /^random\s+chapter\s*(ot|nt|old|new)?\s*$/i.test(text)) {
     try {
-      const book = ALL_BOOKS[Math.floor(Math.random() * ALL_BOOKS.length)];
+      const testamentMatch = text.match(/^random\s+chapter\s+(ot|nt|old|new)\s*$/i);
+      const testament = testamentMatch ? (testamentMatch[1].toUpperCase().startsWith("O") || testamentMatch[1].toUpperCase() === "OT" ? "OT" : "NT") : null;
+      const pool = testament ? (testament === "OT" ? OT_BOOKS : NT_BOOKS) : ALL_BOOKS;
+      const book = pool[Math.floor(Math.random() * pool.length)];
       const chapter = Math.floor(Math.random() * KJV_BOOKS[book]) + 1;
       const data = await callBibleApi({ action: "getChapter", book, chapter });
       if (data?.verses?.length) {
@@ -1712,14 +1719,20 @@ client.on("interactionCreate", async (interaction) => {
 
       if (commandName === "random") {
         const type = interaction.options.getString("type") || "verse";
+        const testament = interaction.options.getString("testament"); // "OT" or "NT"
         if (type === "chapter") {
-          const book = ALL_BOOKS[Math.floor(Math.random() * ALL_BOOKS.length)];
+          // For chapter, filter by testament if specified
+          const pool = testament ? (testament === "OT" ? OT_BOOKS : NT_BOOKS) : ALL_BOOKS;
+          const book = pool[Math.floor(Math.random() * pool.length)];
           const chapter = Math.floor(Math.random() * KJV_BOOKS[book]) + 1;
           const data = await callBibleApi({ action: "getChapter", book, chapter });
           if (data?.verses?.length) await interaction.reply(buildChapterEmbed(book, chapter, data.verses, data.colophon, data.bookFullName));
           else await interaction.reply({ content: "❌ Could not fetch a random chapter.", flags: 64 });
         } else {
-          const data = await callBibleApi({ action: "random_verse" });
+          // API supports testament filtering for random_verse
+          const apiParams = { action: "random_verse" };
+          if (testament) apiParams.testament = testament;
+          const data = await callBibleApi(apiParams);
           if (data?.verse) await interaction.reply(buildVerseEmbed([data.verse]));
           else await interaction.reply({ content: "❌ Could not fetch a random verse.", flags: 64 });
         }

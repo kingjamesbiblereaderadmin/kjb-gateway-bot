@@ -1,0 +1,101 @@
+[
+  {
+    "guild_id": "1412497585888825527",
+    "channel_name": "daily-verse",
+    "webhook_url": "https://discord.com/api/webhooks/1535057588272762930/J_uFh2aJDkPT_ONWxlVATSO7LOZ6TWOjyD1n2NRO4nwtYeXAibC9cIf4vMHMbFwgzzWf",
+    "role_id": "1444163195332984882",
+    "verse_time": "09:00",
+    "timezone": "UTC",
+    "active": true,
+    "last_sent_date": "",
+    "updates_ready": true
+  },
+  {
+    "guild_id": "1422024026976682047",
+    "channel_name": "daily-verse",
+    "webhook_url": "https://discord.com/api/webhooks/1535057597265354843/V1d1MZlnTr0QAjLlM6v2os8kbkGSp4DrI0i3W6Rg2o-cCdVrwwLionMB2_FvUS5nE4Dk",
+    "role_id": "everyone",
+    "verse_time": "08:00",
+    "timezone": "UTC",
+    "active": true,
+    "last_sent_date": "",
+    "updates_ready": true
+  },
+  {
+    "guild_id": "1448430345027453149",
+    "channel_name": "daily-verse",
+    "webhook_url": "https://discord.com/api/webhooks/1535057600184590421/M4eX-duY2up5fLma7a2AIEnlXnrJ_Ib7ZNi_2ZENJAhWYZX6FNaScAlJau_5oMjPLioX",
+    "role_id": "everyone",
+    "verse_time": "08:00",
+    "timezone": "UTC",
+    "active": true,
+    "last_sent_date": "",
+    "updates_ready": true
+  },
+  {
+    "guild_id": "1501135569495916666",
+    "channel_name": "\u2721\uff65daily-verse",
+    "webhook_url": "https://discord.com/api/webhooks/1535057602097184898/o-393v2Qd36pjjK1Fzh7IsNXQ9aoDs4vGiz2fl40L9SZN90clwlMmVaOdPmPFRSu7fr2",
+    "role_id": "1532968183516889108",
+    "verse_time": "12:00",
+    "timezone": "America/New_York",
+    "active": true,
+    "last_sent_date": "",
+    "updates_ready": true
+  },
+  {
+    "guild_id": "1514869627618857111",
+    "channel_name": "daily-verse",
+    "webhook_url": "https://discord.com/api/webhooks/1535057603342766240/5_EmTpTRio5YUpEZz1qFINjjJ_JgzfjId3wFFgTXc0IEPl5tJ7oZjIEOMxQXQ0vJq4go",
+    "role_id": "1524889592648437840",
+    "verse_time": "13:00",
+    "timezone": "America/Chicago",
+    "active": true,
+    "last_sent_date": "",
+    "updates_ready": true
+  },
+  {
+    "guild_id": "1529463600178135171",
+    "channel_name": "daily-verse",
+    "webhook_url": "https://discord.com/api/webhooks/1535057604555051018/Sz9tk60W9SdVHlDiwmqkzUK2UJuB-nEpIxXl1lJbvxl0gWTOmlh1D7F3MYy2f0XTrWTg",
+    "role_id": "everyone",
+    "verse_time": "11:00",
+    "timezone": "Asia/Singapore",
+    "active": true,
+    "last_sent_date": "",
+    "updates_ready": true
+  },
+  {
+    "guild_id": "1534067921083564123",
+    "channel_name": "daily-verse",
+    "webhook_url": "https://discord.com/api/webhooks/1535057605754617906/r-c0t9ErV65yYgjeTc05rOCWVISRr-LtbypFrlr7e7wOCNI6dlSUZQis2RMnWdjqcEBm",
+    "role_id": "everyone",
+    "verse_time": "12:00",
+    "timezone": "UTC",
+    "active": true,
+    "last_sent_date": "",
+    "updates_ready": true
+  },
+  {
+    "guild_id": "1534068634706509874",
+    "channel_name": "daily-verse",
+    "webhook_url": "https://discord.com/api/webhooks/1535057607184613406/3FBeDgz27DefMf7Q7XkxHiz6VvpWs_F28PF749tj-KkmHL59OUpArs_EgyLIRZYmywtx",
+    "role_id": "everyone",
+    "verse_time": "12:00",
+    "timezone": "UTC",
+    "active": true,
+    "last_sent_date": "",
+    "updates_ready": true
+  },
+  {
+    "guild_id": "1479945335135666380",
+    "channel_name": "general",
+    "webhook_url": "https://discord.com/api/webhooks/1531325016551985224/0XEOdaUxdahjlA3VzRCQAZiKXgxjPW3xRTu3p7SGmELcCVkeEA_56pxnldlq-7_XQPc0",
+    "role_id": "everyone",
+    "verse_time": "08:00",
+    "timezone": "UTC",
+    "active": true,
+    "last_sent_date": "",
+    "updates_ready": true
+  }
+]

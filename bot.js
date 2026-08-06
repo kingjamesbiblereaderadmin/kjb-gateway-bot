@@ -3,6 +3,7 @@ import cron from "node-cron";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { exec } from "child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,6 +24,38 @@ function loadServers() {
 }
 function saveServers(servers) {
   fs.writeFileSync(SERVERS_FILE, JSON.stringify(servers, null, 2));
+  scheduleGitBackup();
+}
+
+// ── Live backup of servers.json to git ─────────────────────────────────────
+// servers.json is the only persistent record of per-guild settings, and this app is deployed
+// via git-sync (a code push redeploys the container from the repo). Without this, a code deploy
+// would silently reset every guild's settings to whatever was last committed, and could even make
+// already-configured guilds look "new" again (re-triggering onboarding). To prevent that, every
+// write to servers.json is committed and pushed back to the SAME repo/branch on a short debounce,
+// so the repo is always a near-live mirror of the running state and a future deploy can never regress it.
+let _gitBackupTimer = null;
+function scheduleGitBackup() {
+  if (_gitBackupTimer) return;
+  _gitBackupTimer = setTimeout(() => {
+    _gitBackupTimer = null;
+    const token = process.env.GITHUB_PUSH_TOKEN;
+    if (!token) { console.warn("⚠️ GITHUB_PUSH_TOKEN not set — skipping servers.json git backup"); return; }
+    const remote = `https://kingjamesbiblereaderadmin:${token}@github.com/kingjamesbiblereaderadmin/kjb-gateway-bot.git`;
+    const cmd = [
+      `git add servers.json`,
+      `git -c user.email="bot@kjbreader.local" -c user.name="KJB Reader Bot" commit -m "auto-backup servers.json" --quiet`,
+      `git push "${remote}" HEAD:main --quiet`,
+    ].join(" && ");
+    exec(cmd, { cwd: __dirname }, (err, stdout, stderr) => {
+      if (err) {
+        if (/nothing to commit/i.test(stdout + stderr)) return; // no-op, fine
+        console.error("⚠️ servers.json git backup failed:", (stderr || err.message || "").slice(0, 300));
+      } else {
+        console.log("💾 servers.json backed up to git");
+      }
+    });
+  }, 15000); // debounce: coalesce rapid successive writes into one commit
 }
 function getServer(guildId) {
   return loadServers().find(s => s.guild_id === guildId);

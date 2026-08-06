@@ -757,15 +757,18 @@ const GUILD_CHANNEL_MAP = new Map();
 
 client.on("ready", async () => {
   console.log(`✅ KJB Reader online as ${client.user.tag}`);
-  // Sync any guilds not yet in servers.json (catches guilds added while offline)
+  // Sync any guilds not yet in servers.json (catches guilds added while offline, or a locally-lost record after a restart/redeploy).
+  // IMPORTANT: always silent — never re-send the @everyone welcome/announcement here. A real first-time install
+  // is handled exclusively by the guildCreate event below. This path only exists to quietly rebuild a missing
+  // local record (e.g. after a redeploy) without spamming a server that's already been set up.
   try {
     const guilds = [...client.guilds.cache.values()];
     const servers = loadServers();
     for (const guild of guilds) {
       const existing = servers.find(s => s.guild_id === guild.id);
       if (!existing) {
-        console.log(`📝 Syncing new guild: ${guild.id}`);
-        await onboardGuild(guild);
+        console.log(`📝 Silently re-syncing guild missing from local record: ${guild.id}`);
+        await onboardGuild(guild, { silent: true });
       }
     }
   } catch (e) { console.error("ready sync:", e.message); }
@@ -861,7 +864,7 @@ function buildWelcomeEmbed() {
     .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
 }
 
-async function onboardGuild(guild) {
+async function onboardGuild(guild, { silent = false } = {}) {
   try {
     // 1. Create #daily-verse channel (or use existing)
     const { channel: dailyChannel, isNew } = await ensureDailyVerseChannel(guild);
@@ -895,22 +898,26 @@ async function onboardGuild(guild) {
       updates_ready: true,
     });
 
-    // 5. Post welcome message with @everyone ping to #daily-verse
-    if (webhookUrl) {
-      try {
-        await fetch(webhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: "@everyone", embeds: [buildWelcomeEmbed()] }),
-        });
-      } catch (e) { console.error("onboardGuild welcome:", e.message); }
+    // 5. Post welcome message with @everyone ping to #daily-verse — ONLY for a genuine first-time install, never on a silent resync.
+    if (!silent) {
+      if (webhookUrl) {
+        try {
+          await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: "@everyone", embeds: [buildWelcomeEmbed()] }),
+          });
+        } catch (e) { console.error("onboardGuild welcome:", e.message); }
+      } else {
+        // Fallback: send via channel directly
+        await dailyChannel.send({ content: "@everyone", embeds: [buildWelcomeEmbed()] });
+      }
     } else {
-      // Fallback: send via channel directly
-      await dailyChannel.send({ content: "@everyone", embeds: [buildWelcomeEmbed()] });
+      console.log(`🔇 Skipped welcome ping for guild ${guild.id} (silent resync, not a new install)`);
     }
 
-    // 6. Post a brief announcement in #kjb-bot-updates
-    try {
+    // 6. Post a brief announcement in #kjb-bot-updates — also skipped on a silent resync.
+    if (!silent) try {
       const updatesChannel = [...guild.channels.cache.values()].find(c => /kjb.?bot.?update/i.test(c.name) && c.isTextBased());
       if (updatesChannel?.send) {
         const announceEmbed = new EmbedBuilder()

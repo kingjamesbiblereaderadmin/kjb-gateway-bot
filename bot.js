@@ -667,10 +667,10 @@ function buildDailyVerseEmbed(v) {
 }
 
 // Search embed — matches V3: 5 per page, full verse text, keyword highlighting, per-result openverse buttons
-function buildSearchEmbed(query, keywords, total, verses, page) {
+function buildSearchEmbed(query, keywords, total, verses, page, sliceStart) {
   const perPage = 5;
   const totalPages = Math.ceil(total / perPage);
-  const start = page * perPage;
+  const start = (typeof sliceStart === "number") ? sliceStart : page * perPage;
   const show = verses.slice(start, start + perPage);
   let desc = show.map(v => {
     const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
@@ -1006,13 +1006,6 @@ function buildSetupEmbed(guildId) {
       .setMinValues(1)
       .setMaxValues(1)
   );
-  const everyoneRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("setup_everyone")
-      .setLabel("Use @everyone")
-      .setStyle(server.role_id === "everyone" ? ButtonStyle.Success : ButtonStyle.Secondary)
-  );
-
   const tzRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("setup_tz")
@@ -1041,8 +1034,12 @@ function buildSetupEmbed(guildId) {
       })))
   );
 
-  // Enable/Disable buttons
+  // Everyone / Enable / Disable / Fix Webhook buttons — merged into one row to stay within Discord's 5-action-row limit
   const toggleRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("setup_everyone")
+      .setLabel("Use @everyone")
+      .setStyle(server.role_id === "everyone" ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId("setup_enable")
       .setLabel("Enable")
@@ -1061,7 +1058,7 @@ function buildSetupEmbed(guildId) {
 
   return {
     embeds: [embed],
-    components: [channelRow, roleRow, everyoneRow, tzRow, timeRow, toggleRow],
+    components: [channelRow, roleRow, tzRow, timeRow, toggleRow],
     allowedMentions: { parse: [] },
   };
 }
@@ -2333,14 +2330,16 @@ client.on("interactionCreate", async (interaction) => {
       await interaction.deferUpdate();
       const words = query.toLowerCase().split(/[,;\s]+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
       let verses, total;
+      let sliceStart = page * 5;
       if (words.length === 1) {
-        // Single word: fetch the right 100-chunk from API, slice 5 for this page
+        // Single word: fetch the 100-item chunk that contains this page, then let
+        // buildSearchEmbed slice the exact 5-item window (via sliceStart) — do NOT
+        // pre-slice here, or the page gets sliced twice and comes back empty.
         const off = Math.floor((page * 5) / 100) * 100;
         const searchData = await callBibleApi({ action: "search", query: words[0], offset: off });
-        const allResults = searchData?.results || [];
+        verses = searchData?.results || [];
         total = searchData?.total || 0;
-        const sliceStart = (page * 5) - off;
-        verses = allResults.slice(sliceStart, sliceStart + 5);
+        sliceStart = (page * 5) - off;
       } else {
         // Smart multi-word: same approach as initial search
         const firstPages = await Promise.all(words.map(w =>
@@ -2368,10 +2367,16 @@ client.on("interactionCreate", async (interaction) => {
           return otherRegexes.every(re => re.test(text));
         });
         total = verses.length;
+        sliceStart = page * 5;
       }
       if (!total) return interaction.editReply({ content: "❌ No results.", embeds: [], components: [] });
-      await interaction.editReply(buildSearchEmbed(query, words, total, verses, page));
-    } catch (e) { console.error("srchpg:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
+      await interaction.editReply(buildSearchEmbed(query, words, total, verses, page, sliceStart));
+    } catch (e) {
+      console.error("srchpg:", e.message);
+      // deferUpdate() was already called above, so the interaction is acknowledged —
+      // must use editReply here, not reply(), or Discord shows "app didn't respond".
+      interaction.editReply({ content: "❌ Error loading that page.", embeds: [], components: [] }).catch(() => {});
+    }
     return;
   }
   } catch (e) {

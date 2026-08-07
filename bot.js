@@ -1660,7 +1660,7 @@ client.on("messageCreate", async (message) => {
       const m = inlineMatches[0]; // take the first valid match
       const book = tryResolveBook(m[1]);
       const chapter = parseInt(m[2]);
-      inlineRef = { book, chapter, verseStart: parseInt(m[3]), verseEnd: m[4] ? parseInt(m[4]) : null };
+      inlineRef = { book, chapter, verseStart: parseInt(m[3]), verseEnd: m[5] ? parseInt(m[5]) : null };
     }
   }
 

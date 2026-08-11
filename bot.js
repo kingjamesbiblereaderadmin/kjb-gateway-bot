@@ -720,11 +720,12 @@ function buildSearchEmbed(query, keywords, total, verses, page, sliceStart) {
     .setFooter({ text: `KJB Reader • Page ${page + 1} of ${Math.max(1, totalPages)} (${total} result${total !== 1 ? "s" : ""}) • kingjamesbiblereader.com` });
 
   const rows = [];
-  // Row 1: Per-result openverse buttons
+  // Row 1: Per-result verse buttons — search results post publicly (srchverse|), unlike
+  // the private openverse| lookups used elsewhere (gospel citations, multi-ref groups).
   if (show.length > 0) {
     const resultBtns = show.map(v => {
       const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
-      return new ButtonBuilder().setCustomId(`openverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(ref);
+      return new ButtonBuilder().setCustomId(`srchverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(ref);
     });
     rows.push(new ActionRowBuilder().addComponents(...resultBtns));
   }
@@ -2015,31 +2016,46 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       if (commandName === "help") {
-        const helpEmbed = new EmbedBuilder()
-          .setTitle("📖 KJB Reader — Help")
-          .setDescription([
-            "**Slash commands:**",
-            "• `/read [reference]` — Verse, range, or chapter (e.g. `John 3:16`, `Psalm 23`, `1 Corinthians 15:1-4`) or Table of Contents",
-            "• `/random [type]` — Random verse or chapter",
-            "• `/daily` — Today's daily verse",
-            "• `/search [keyword]` — Search verses by keyword",
-            "• `/toc [book]` — Browse the Bible table of contents",
-            "• `/gospel` — How to be saved",
-            "• `/setup` — (Server admin) Configure daily verse delivery",
-            "",
+        // DMs have no server context — hide server-admin-only commands (/setup) and
+        // the "type naturally" tip (a guild-channel convenience) so DM users only see
+        // what actually works for them there.
+        const inGuild = !!interaction.guild;
+        const helpLines = [
+          "**Slash commands:**",
+          "• `/read [reference]` — Verse, range, or chapter (e.g. `John 3:16`, `Psalm 23`, `1 Corinthians 15:1-4`) or Table of Contents",
+          "• `/random [type]` — Random verse or chapter",
+          "• `/daily` — Today's daily verse",
+          "• `/search [keyword]` — Search verses by keyword",
+          "• `/toc [book]` — Browse the Bible table of contents",
+          "• `/gospel` — How to be saved",
+        ];
+        if (inGuild) {
+          helpLines.push("• `/setup` — (Server admin) Configure daily verse delivery");
+        }
+        helpLines.push("");
+        if (inGuild) {
+          helpLines.push(
             "**Or just type naturally** in any channel — no slash needed:",
             "`John 3:16`, `Psalm 23`, `random`, `search faith`, `daily`, `toc`, `gospel`",
             "",
-            "**Install KJB Reader:**",
-            "📱 **[Add to your account](https://discord.com/oauth2/authorize?client_id=1529303667348606996&scope=applications.commands&integration_type=1)** — DMs, group DMs, any server",
-            "🏠 **[Add to a server](https://discord.com/oauth2/authorize?client_id=1529303667348606996&scope=bot+applications.commands&permissions=378494381072)** — Daily verse delivery",
-            "",
-            "**Support:**",
-            "Join our Discord: **[kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)**",
-            "📧 Email: **[Kingjamesbiblereader@outlook.sg](mailto:Kingjamesbiblereader@outlook.sg)**",
-            "",
-            "Bible App powered by **[kingjamesbiblereader.com](https://kingjamesbiblereader.com)**",
-          ].join("\n"))
+          );
+        }
+        helpLines.push(
+          "**Install KJB Reader:**",
+          "📱 **[Add to your account](https://discord.com/oauth2/authorize?client_id=1529303667348606996&scope=applications.commands&integration_type=1)** — DMs, group DMs, any server",
+          "🏠 **[Add to a server](https://discord.com/oauth2/authorize?client_id=1529303667348606996&scope=bot+applications.commands&permissions=378494381072)** — Daily verse delivery",
+        );
+        helpLines.push(
+          "",
+          "**Support:**",
+          "Join our Discord: **[kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)**",
+          "📧 Email: **[Kingjamesbiblereader@outlook.sg](mailto:Kingjamesbiblereader@outlook.sg)**",
+          "",
+          "Bible App powered by **[kingjamesbiblereader.com](https://kingjamesbiblereader.com)**",
+        );
+        const helpEmbed = new EmbedBuilder()
+          .setTitle("📖 KJB Reader — Help")
+          .setDescription(helpLines.join("\n"))
           .setColor(0xC8922E).setThumbnail(KJB_LOGO)
           .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
         await interaction.reply({ embeds: [helpEmbed] });
@@ -2297,7 +2313,22 @@ client.on("interactionCreate", async (interaction) => {
     return;
   }
 
-  // Open verse from search results / multi-ref group buttons
+  // Open verse from search results — posts a NEW PUBLIC message (visible to everyone
+  // in the channel), unlike the private openverse| lookups used elsewhere.
+  if (customId.startsWith("srchverse|")) {
+    const ref = customId.slice("srchverse|".length);
+    try {
+      const verses = (await resolveRefRange(ref)).filter(isValidVerse);
+      if (verses.length) {
+        await interaction.reply(buildVerseEmbed(verses));
+      } else {
+        interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {});
+      }
+    } catch (e) { console.error("srchverse:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
+    return;
+  }
+
+  // Open verse from gospel citations / multi-ref group buttons — private lookup
   if (customId.startsWith("openverse|")) {
     const ref = customId.slice("openverse|".length);
     try {

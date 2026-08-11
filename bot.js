@@ -473,7 +473,8 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
       new ButtonBuilder().setCustomId(`copyref|${shortRef}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel("📋 Copy"),
     ));
   } else {
-    // Multi-ref: grouped "open verse" buttons (one per range/group) + TOC
+    // Multi-ref: grouped "open verse" buttons (one per range/group) + TOC.
+    // These post a NEW PUBLIC message (srchverse|) — same as search result buttons.
     // Row 1: TOC + up to 4 group buttons
     const groupButtons = groups.slice(0, 4).map(g => {
       const gFirst = g[0], gLast = g[g.length - 1];
@@ -483,7 +484,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
       const label = g.length === 1
         ? `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
         : `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
-      return new ButtonBuilder().setCustomId(`openverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
+      return new ButtonBuilder().setCustomId(`srchverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
     });
     rows.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
@@ -500,7 +501,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
         const label = g.length === 1
           ? `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
           : `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
-        return new ButtonBuilder().setCustomId(`openverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
+        return new ButtonBuilder().setCustomId(`srchverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
       });
       rows.push(new ActionRowBuilder().addComponents(...groupButtons2));
     }
@@ -1880,7 +1881,7 @@ client.on("interactionCreate", async (interaction) => {
     const { commandName } = interaction;
     try {
       if (commandName === "read") {
-        const refText = interaction.options.getString("reference");
+        const refText = interaction.options.getString("verse");
         if (!refText) { await interaction.reply(buildBibleTocEmbed(0)); return; }
         const parsed = parseRef(refText);
         if (!parsed) {
@@ -2022,7 +2023,7 @@ client.on("interactionCreate", async (interaction) => {
         const inGuild = !!interaction.guild;
         const helpLines = [
           "**Slash commands:**",
-          "• `/read [reference]` — Verse, range, or chapter (e.g. `John 3:16`, `Psalm 23`, `1 Corinthians 15:1-4`) or Table of Contents",
+          "• `/read [verse]` — Verse, range, or chapter (e.g. `John 3:16`, `Psalm 23`, `1 Corinthians 15:1-4`) or Table of Contents",
           "• `/random [type]` — Random verse or chapter",
           "• `/daily` — Today's daily verse",
           "• `/search [keyword]` — Search verses by keyword",

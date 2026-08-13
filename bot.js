@@ -2306,12 +2306,12 @@ client.on("interactionCreate", async (interaction) => {
       }
       const d = await callBibleApi({ action: "resolve_refs", refs: [`${targetBook} ${targetCh}:${targetVs}`] });
       const v = d?.verses?.[0];
-      if (v) {
+      if (v && isValidVerse(v)) {
         await interaction.update(buildVerseEmbed([v]));
       } else {
         interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {});
       }
-    } catch (e) { console.error("prevvs/nextvs:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
+    } catch (e) { console.error("prevvs/nextvs:", e.message); interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {}); }
     return;
   }
 
@@ -2355,7 +2355,7 @@ client.on("interactionCreate", async (interaction) => {
       } else {
         interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {});
       }
-    } catch (e) { console.error("srchverse:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
+    } catch (e) { console.error("srchverse:", e.message); interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {}); }
     return;
   }
 
@@ -2369,7 +2369,7 @@ client.on("interactionCreate", async (interaction) => {
       } else {
         interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {});
       }
-    } catch (e) { console.error("openverse:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
+    } catch (e) { console.error("openverse:", e.message); interaction.reply({ content: "❌ Verse not found.", flags: 64 }).catch(() => {}); }
     return;
   }
 

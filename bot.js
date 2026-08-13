@@ -238,6 +238,21 @@ function tryResolveBook(rawBook) {
   return null;
 }
 
+// Like tryResolveBook, but only accepts a match whose first letter is capitalized in the
+// original text. Used for chapter-only inline detection (no ":verse"), which is riskier —
+// without a colon to anchor it, short lowercase aliases (e.g. "am" -> Amos, "is" -> Isaiah)
+// could otherwise misfire on ordinary words like "I am 3 minutes late".
+function resolveBookCapitalized(rawBook) {
+  const parts = rawBook.split(/\s+/);
+  for (let i = 0; i < parts.length; i++) {
+    const candidate = parts.slice(i).join(" ");
+    if (!/^(?:[123]\s*)?[A-Z]/.test(candidate)) continue;
+    const book = resolveBook(candidate);
+    if (book) return book;
+  }
+  return null;
+}
+
 function parseRef(text) {
   const m = text.trim().match(/^((?:[123]\s*)?[A-Za-z][A-Za-z\s]*?)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$/);
   if (!m) return null;
@@ -1663,6 +1678,21 @@ client.on("messageCreate", async (message) => {
       const book = tryResolveBook(m[1]);
       const chapter = parseInt(m[2]);
       inlineRef = { book, chapter, verseStart: parseInt(m[3]), verseEnd: m[5] ? parseInt(m[5]) : null };
+    } else {
+      // Fallback: chapter-only reference (no ":verse") anywhere in the message, e.g.
+      // "Psalm 23 is beautiful" or "I love Psalm 23" — previously this only worked when
+      // the ENTIRE message was exactly the reference (via parseRef above).
+      const chapterOnlyPattern = /\b((?:[123]\s*)?[A-Za-z]{2,}(?:\s[A-Za-z]+)?)\s+(\d+)\b/g;
+      const chapterMatches = [...content.matchAll(chapterOnlyPattern)].filter(m => {
+        const book = resolveBookCapitalized(m[1]);
+        return book && KJV_BOOKS[book] && parseInt(m[2]) >= 1 && parseInt(m[2]) <= KJV_BOOKS[book];
+      });
+      if (chapterMatches.length) {
+        const m = chapterMatches[0];
+        const book = resolveBookCapitalized(m[1]);
+        const chapter = parseInt(m[2]);
+        inlineRef = { book, chapter, verseStart: null, verseEnd: null };
+      }
     }
   }
 

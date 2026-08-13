@@ -1911,7 +1911,7 @@ client.on("interactionCreate", async (interaction) => {
     const { commandName } = interaction;
     try {
       if (commandName === "read") {
-        const refText = interaction.options.getString("verse");
+        const refText = interaction.options.getString("reference");
         if (!refText) { await interaction.reply(buildBibleTocEmbed(0)); return; }
         const parsed = parseRef(refText);
         if (!parsed) {
@@ -2053,7 +2053,7 @@ client.on("interactionCreate", async (interaction) => {
         const inGuild = !!interaction.guild;
         const helpLines = [
           "**Slash commands:**",
-          "• `/read [verse]` — Verse, range, or chapter (e.g. `John 3:16`, `Psalm 23`, `1 Corinthians 15:1-4`) or Table of Contents",
+          "• `/read [reference]` — Verse, range, or chapter (e.g. `John 3:16`, `Psalm 23`, `1 Corinthians 15:1-4`) or Table of Contents",
           "• `/random [type]` — Random verse or chapter",
           "• `/daily` — Today's daily verse",
           "• `/search [keyword]` — Search verses by keyword",

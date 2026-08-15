@@ -2099,7 +2099,7 @@ client.on("interactionCreate", async (interaction) => {
           await interaction.reply({ content: "❌ You need **Manage Server** permission to use setup.", flags: 64 });
           return;
         }
-        await interaction.reply(buildSetupEmbed(interaction.guild.id));
+        await interaction.reply({ ...buildSetupEmbed(interaction.guild.id), flags: 64 });
         return;
       }
 

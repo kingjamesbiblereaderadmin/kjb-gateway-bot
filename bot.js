@@ -2314,8 +2314,7 @@ client.on("interactionCreate", async (interaction) => {
       const d = await callBibleApi({ action: "getChapter", book, chapter });
       const verses = d?.verses || [];
       if (!verses.length) return interaction.reply({ content: "❌ Not found.", flags: 64 });
-      const copyBookName = KJV_FULL_TITLES[book] || book;
-      let copyText = `${copyBookName} — Chapter ${chapter} (KJB)\n` + verses.map(v => `[${v.verse}] ${stripMd(v.text)}`).join("\n");
+      let copyText = `${book} ${chapter} (KJB)\n` + verses.map(v => `[${v.verse}] ${stripMd(v.text)}`).join("\n");
       if (d.colophon) copyText += `\n¶ ${stripMd(d.colophon)}`;
       const chunks = [];
       const lines = copyText.split("\n");

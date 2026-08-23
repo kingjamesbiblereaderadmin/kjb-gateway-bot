@@ -896,6 +896,47 @@ client.on("ready", async () => {
     }
     console.log(`🧹 Cleanup complete.`);
   } catch (e) { console.error("Cleanup error:", e.message); }
+
+  // ── ONE-TIME ANNOUNCEMENT: Send update to all guilds ──
+  try {
+    console.log(`📢 Sending announcement to all guilds...`);
+    const announceEmbed = new EmbedBuilder()
+      .setTitle("📢 KJB Reader — Important Update")
+      .setDescription([
+        "The **daily verse** feature has been **permanently removed** from KJB Reader.",
+        "",
+        "**What happened:**",
+        "Daily verse delivery and the `/daily` and `/random` commands have been discontinued.",
+        "",
+        "**What you need to do:**",
+        "1. Type `/fix` to refresh your bot commands",
+        "2. You can safely delete your `#daily-verse` channel — it's no longer needed",
+        "3. Slash commands like `/verse`, `/chapter`, `/search`, `/gospel`, `/toc`, and `/read` still work as usual",
+        "",
+        "Need help? Contact us at Kingjamesbiblereader@outlook.sg"
+      ].join("\n"))
+      .setColor(0xC8922E)
+      .setThumbnail(KJB_LOGO)
+      .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+
+    for (const guild of [...client.guilds.cache.values()]) {
+      const channels = [...guild.channels.cache.values()];
+      // Find a channel we can send to: prefer #general, #bot-commands, or first text channel
+      const target = channels.find(c => c.name === "general" && c.isTextBased?.() && c.permissionsFor?.(client.user)?.has?.("SendMessages")) ||
+                     channels.find(c => /bot.?command|kjb/i.test(c.name) && c.isTextBased?.() && c.permissionsFor?.(client.user)?.has?.("SendMessages")) ||
+                     channels.find(c => c.isTextBased?.() && c.permissionsFor?.(client.user)?.has?.("SendMessages"));
+      
+      if (target) {
+        try {
+          await target.send({ embeds: [announceEmbed] });
+          console.log(`  ✅ Announcement sent to #${target.name} in guild ${guild.id}`);
+        } catch (e) { console.error(`  ⚠️ Send failed in guild ${guild.id}: ${e.message}`); }
+      } else {
+        console.log(`  ⚠️ Guild ${guild.id}: no channel with send permission`);
+      }
+    }
+    console.log(`📢 Announcement complete.`);
+  } catch (e) { console.error("Announcement error:", e.message); }
 });
 
 // ── Guild Onboarding (matches original discordGuildJoin behavior) ─────────────

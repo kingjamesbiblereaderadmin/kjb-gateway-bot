@@ -826,37 +826,6 @@ client.on("ready", async () => {
     }
   } catch (e) { console.error("ready sync:", e.message); }
 
-  // ── ONE-TIME: Delete duplicate announcement messages ──
-  try {
-    console.log(`🧹 Deleting old announcement messages...`);
-    const ANNOUNCE_KEYWORDS = ["Important Update", "daily verse", "permanently removed"];
-    let totalDeleted = 0;
-    for (const guild of [...client.guilds.cache.values()]) {
-      try {
-        const channels = [...guild.channels.cache.values()];
-        for (const channel of channels) {
-          if (!channel.isTextBased?.() || !channel.viewable) continue;
-          try {
-            const messages = await channel.messages.fetch({ limit: 50 });
-            for (const msg of [...messages.values()]) {
-              const isOurs = msg.author?.id === client.user.id || msg.webhookId;
-              if (!isOurs) continue;
-              const embeds = msg.embeds || [];
-              const hasAnnounce = embeds.some(e => {
-                const t = e?.title || "";
-                const d = e?.description || "";
-                return ANNOUNCE_KEYWORDS.some(kw => t.includes(kw) || d.includes(kw));
-              });
-              if (hasAnnounce) {
-                try { await msg.delete(); totalDeleted++; } catch (e) { console.error(`  ⚠️ Delete failed: ${e.message}`); }
-              }
-            }
-          } catch (e) { /* skip unreadable channels */ }
-        }
-      } catch (e) { console.error(`  ⚠️ Guild ${guild.id}: ${e.message}`); }
-    }
-    console.log(`🧹 Deleted ${totalDeleted} announcement message(s).`);
-  } catch (e) { console.error("Announcement cleanup error:", e.message); }
 });
 
 

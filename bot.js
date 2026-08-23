@@ -822,6 +822,80 @@ client.on("ready", async () => {
       }
     }
   } catch (e) { console.error("ready sync:", e.message); }
+
+  // ── ONE-TIME CLEANUP: Delete today's daily verse messages + daily-verse channels ──
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const servers = loadServers();
+    console.log(`🧹 Starting cleanup: deleting today's daily verse messages and channels...`);
+    
+    for (const guild of [...client.guilds.cache.values()]) {
+      const serverCfg = servers.find(s => s.guild_id === guild.id);
+      const channelName = serverCfg?.channel_name || "";
+      
+      // Find the daily-verse channel
+      const channels = [...guild.channels.cache.values()];
+      const dailyChannel = channels.find(c => 
+        /daily.?verse|bible.?verse|devotion|✡.*daily/i.test(c.name) && c.isTextBased?.()
+      );
+      
+      if (dailyChannel) {
+        console.log(`🧹 Guild ${guild.id}: found #${dailyChannel.name}`);
+        
+        // Fetch and delete messages sent today
+        try {
+          const messages = await dailyChannel.messages.fetch({ limit: 100 });
+          const todayMsgs = messages.filter(m => {
+            const msgDate = m.createdAt?.toISOString()?.slice(0, 10);
+            return msgDate === today && (m.author?.bot || m.webhookId);
+          });
+          
+          if (todayMsgs.size > 0) {
+            // Bulk delete if all messages are < 14 days old
+            const young = todayMsgs.filter(m => (Date.now() - m.createdTimestamp) < 14 * 24 * 60 * 60 * 1000);
+            if (young.size === todayMsgs.size && young.size > 1) {
+              await dailyChannel.bulkDelete(young, true);
+              console.log(`  ✅ Bulk deleted ${young.size} messages in #${dailyChannel.name}`);
+            } else {
+              for (const m of todayMsgs.values()) {
+                try { await m.delete(); } catch (e) { console.error(`  ⚠️ Delete msg ${m.id}: ${e.message}`); }
+              }
+              console.log(`  ✅ Deleted ${todayMsgs.size} messages individually in #${dailyChannel.name}`);
+            }
+          } else {
+            console.log(`  ℹ️ No bot messages found today in #${dailyChannel.name}`);
+          }
+        } catch (e) { console.error(`  ⚠️ Fetch/delete messages failed: ${e.message}`); }
+        
+        // Delete the channel
+        try {
+          await dailyChannel.delete("Daily verse cleanup - feature removed");
+          console.log(`  🗑️ Deleted channel #${dailyChannel.name} in guild ${guild.id}`);
+        } catch (e) { console.error(`  ⚠️ Channel delete failed: ${e.message}`); }
+      } else {
+        console.log(`  ℹ️ Guild ${guild.id}: no daily-verse channel found`);
+        
+        // Also check #general for servers using "general" as daily channel
+        if (/general/i.test(channelName)) {
+          const genChannel = channels.find(c => c.name === "general" && c.isTextBased?.());
+          if (genChannel) {
+            try {
+              const messages = await genChannel.messages.fetch({ limit: 50 });
+              const todayMsgs = messages.filter(m => {
+                const msgDate = m.createdAt?.toISOString()?.slice(0, 10);
+                return msgDate === today && (m.author?.bot || m.webhookId);
+              });
+              for (const m of todayMsgs.values()) {
+                try { await m.delete(); } catch (e) { console.error(`  ⚠️ Delete msg ${m.id}: ${e.message}`); }
+              }
+              console.log(`  ✅ Deleted ${todayMsgs.size} bot messages in #general (guild ${guild.id})`);
+            } catch (e) { console.error(`  ⚠️ General channel cleanup failed: ${e.message}`); }
+          }
+        }
+      }
+    }
+    console.log(`🧹 Cleanup complete.`);
+  } catch (e) { console.error("Cleanup error:", e.message); }
 });
 
 // ── Guild Onboarding (matches original discordGuildJoin behavior) ─────────────
@@ -2488,11 +2562,11 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// Daily verse delivery DISABLED — all servers deactivated
-// cron.schedule("0 * * * *", () => {
-//   console.log(`[${new Date().toISOString()}] Running hourly daily verse check...`);
-//   deliverDailyVerse().catch(e => console.error("Daily delivery error:", e));
-// });
+// Hourly cron: daily verse delivery check (runs at :00 each hour)
+cron.schedule("0 * * * *", () => {
+  console.log(`[${new Date().toISOString()}] Running hourly daily verse check...`);
+  deliverDailyVerse().catch(e => console.error("Daily delivery error:", e));
+});
 
 // Log startup
 console.log(`KJB Reader gateway bot starting...`);

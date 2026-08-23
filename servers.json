@@ -6,7 +6,7 @@
     "role_id": "1444163195332984882",
     "verse_time": "09:00",
     "timezone": "UTC",
-    "active": true,
+    "active": false,
     "last_sent_date": "",
     "updates_ready": true
   },
@@ -17,7 +17,7 @@
     "role_id": "everyone",
     "verse_time": "08:00",
     "timezone": "UTC",
-    "active": true,
+    "active": false,
     "last_sent_date": "",
     "updates_ready": true
   },
@@ -28,7 +28,7 @@
     "role_id": "everyone",
     "verse_time": "08:00",
     "timezone": "UTC",
-    "active": true,
+    "active": false,
     "last_sent_date": "",
     "updates_ready": true
   },
@@ -39,7 +39,7 @@
     "role_id": "1532968183516889108",
     "verse_time": "12:00",
     "timezone": "America/New_York",
-    "active": true,
+    "active": false,
     "last_sent_date": "",
     "updates_ready": true
   },
@@ -50,7 +50,7 @@
     "role_id": "1524889592648437840",
     "verse_time": "13:00",
     "timezone": "America/Chicago",
-    "active": true,
+    "active": false,
     "last_sent_date": "",
     "updates_ready": true
   },
@@ -61,7 +61,7 @@
     "role_id": "everyone",
     "verse_time": "11:00",
     "timezone": "Asia/Singapore",
-    "active": true,
+    "active": false,
     "last_sent_date": "",
     "updates_ready": true
   },
@@ -72,7 +72,7 @@
     "role_id": "everyone",
     "verse_time": "12:00",
     "timezone": "UTC",
-    "active": true,
+    "active": false,
     "last_sent_date": "",
     "updates_ready": true
   },
@@ -83,7 +83,7 @@
     "role_id": "everyone",
     "verse_time": "12:00",
     "timezone": "UTC",
-    "active": true,
+    "active": false,
     "last_sent_date": "",
     "updates_ready": true
   },
@@ -94,7 +94,7 @@
     "role_id": "everyone",
     "verse_time": "08:00",
     "timezone": "UTC",
-    "active": true,
+    "active": false,
     "last_sent_date": "",
     "updates_ready": true
   }

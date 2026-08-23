@@ -2488,11 +2488,11 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// Hourly cron: daily verse delivery check (runs at :00 each hour)
-cron.schedule("0 * * * *", () => {
-  console.log(`[${new Date().toISOString()}] Running hourly daily verse check...`);
-  deliverDailyVerse().catch(e => console.error("Daily delivery error:", e));
-});
+// Daily verse delivery DISABLED — all servers deactivated
+// cron.schedule("0 * * * *", () => {
+//   console.log(`[${new Date().toISOString()}] Running hourly daily verse check...`);
+//   deliverDailyVerse().catch(e => console.error("Daily delivery error:", e));
+// });
 
 // Log startup
 console.log(`KJB Reader gateway bot starting...`);

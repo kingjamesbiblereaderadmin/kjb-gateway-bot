@@ -386,7 +386,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
   const valid = verses.filter(isValidVerse);
   if (!valid.length) return { embeds: [], components: [] };
   const first = valid[0], last = valid[valid.length - 1];
-  const fullTitle = KJV_FULL_TITLES[first.book] || first.book;
+  const fullTitle = first.bookFullName || KJV_FULL_TITLES[first.book] || first.book;
   
   // Check if verses span multiple books or chapters
   const sameBook = valid.every(v => v.book === first.book);
@@ -438,7 +438,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     // Multiple books or refs (e.g., 1 Cor 15:1-4, Romans 3:25, Eph 1:13)
     title = "Multiple Verses";
     blocks = groups.map(g => {
-      const gTitle = KJV_FULL_TITLES[g[0].book] || g[0].book;
+      const gTitle = g[0].bookFullName || KJV_FULL_TITLES[g[0].book] || g[0].book;
       if (g.length === 1) {
         return `**${gTitle} — ${g[0].chapter}:${g[0].verse}**\n\n"${formatKJV(g[0].text)}"`;
       } else {
@@ -493,11 +493,12 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     // Row 1: TOC + up to 4 group buttons
     const groupButtons = groups.slice(0, 4).map(g => {
       const gFirst = g[0], gLast = g[g.length - 1];
+      const gFullName = gFirst.bookFullName || KJV_FULL_TITLES[gFirst.book] || gFirst.book;
       const ref = g.length === 1
         ? `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
         : `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
       const label = g.length === 1
-        ? `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
+        ? `📖 ${gFullName} ${gFirst.chapter}:${gFirst.verse}`
         : `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
       return new ButtonBuilder().setCustomId(`srchverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
     });
@@ -690,7 +691,7 @@ function buildTestamentEmbed(test, page = 0) {
 // Daily verse embed — matches V3: Prev Vs / Next Vs + Read Chapter + TOC + Copy
 function buildDailyVerseEmbed(v) {
   const now = new Date();
-  const fullTitle = KJV_FULL_TITLES[v.book] || v.book;
+  const fullTitle = v.bookFullName || KJV_FULL_TITLES[v.book] || v.book;
   const ref = `${fullTitle} — ${v.chapter}:${v.verse}`;
   let desc = `**${ref}**\n\n`;
   if (v.verse === 1 && v.superscription) desc += `¶ ${formatKJV(v.superscription)}\n\n`;
@@ -723,7 +724,7 @@ function buildSearchEmbed(query, keywords, total, verses, page, sliceStart) {
   const start = (typeof sliceStart === "number") ? sliceStart : page * perPage;
   const show = verses.slice(start, start + perPage);
   let desc = show.map(v => {
-    const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
+    const ref = v.ref || `${v.bookFullName || KJV_FULL_TITLES[v.book] || v.book} — ${v.chapter}:${v.verse}`;
     return `**${ref}**\n\n${highlightKeywords(v.text, keywords)}`;
   }).join("\n\n");
   if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
@@ -740,8 +741,10 @@ function buildSearchEmbed(query, keywords, total, verses, page, sliceStart) {
   // the private openverse| lookups used elsewhere (gospel citations, multi-ref groups).
   if (show.length > 0) {
     const resultBtns = show.map(v => {
-      const ref = v.ref || `${v.book} ${v.chapter}:${v.verse}`;
-      return new ButtonBuilder().setCustomId(`srchverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(ref);
+      const shortRef = `${v.book} ${v.chapter}:${v.verse}`;
+      const fullRef = v.bookFullName || KJV_FULL_TITLES[v.book] || v.book;
+      const label = `${fullRef} ${v.chapter}:${v.verse}`;
+      return new ButtonBuilder().setCustomId(`srchverse|${shortRef}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label.slice(0, 80));
     });
     rows.push(new ActionRowBuilder().addComponents(...resultBtns));
   }
@@ -2311,7 +2314,8 @@ client.on("interactionCreate", async (interaction) => {
       const d = await callBibleApi({ action: "getChapter", book, chapter });
       const verses = d?.verses || [];
       if (!verses.length) return interaction.reply({ content: "❌ Not found.", flags: 64 });
-      let copyText = `${book} ${chapter} (KJB)\n` + verses.map(v => `[${v.verse}] ${stripMd(v.text)}`).join("\n");
+      const copyBookName = KJV_FULL_TITLES[book] || book;
+      let copyText = `${copyBookName} — Chapter ${chapter} (KJB)\n` + verses.map(v => `[${v.verse}] ${stripMd(v.text)}`).join("\n");
       if (d.colophon) copyText += `\n¶ ${stripMd(d.colophon)}`;
       const chunks = [];
       const lines = copyText.split("\n");

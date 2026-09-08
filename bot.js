@@ -281,7 +281,7 @@ function highlightKeywords(text, keywords) {
 function getPrevCh(book, ch) { if (ch > 1) return { book, chapter: ch - 1 }; const idx = BOOK_ORDER.indexOf(book); if (idx <= 0) return null; const p = BOOK_ORDER[idx - 1]; return { book: p, chapter: KJV_BOOKS[p] }; }
 function getNextCh(book, ch) { if (ch < KJV_BOOKS[book]) return { book, chapter: ch + 1 }; const idx = BOOK_ORDER.indexOf(book); if (idx >= BOOK_ORDER.length - 1) return null; const n = BOOK_ORDER[idx + 1]; return { book: n, chapter: 1 }; }
 
-async function callBibleApi(payload) {
+async function callBibleApi(payload, retried = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
   try {
@@ -296,6 +296,12 @@ async function callBibleApi(payload) {
     return await r.json();
   } catch (e) {
     clearTimeout(timeout);
+    // Retry once on transient failures (site redeploys can briefly 404/5xx)
+    const transient = /API returned (404|408|429|5\d\d)/.test(e.message) || e.name === "AbortError";
+    if (!retried && transient) {
+      await new Promise(res => setTimeout(res, 1200));
+      return callBibleApi(payload, true);
+    }
     throw e;
   }
 }
@@ -380,6 +386,25 @@ function paginateBlocks(blocks, budget = 3900) {
   }
   if (current.length) pages.push(current.join("\n\n"));
   return pages.length ? pages : [""];
+}
+
+// Discord rejects messages with duplicated component custom_ids (e.g. the Genesis 1
+// chapter view had "bibletoc|0" in both the nav row and the actions row). Keep the
+// first occurrence and drop any later button reusing the same custom_id.
+function dedupeRows(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const row of rows) {
+    const kept = (row.components || []).filter(btn => {
+      const id = btn?.data?.custom_id;
+      if (id == null) return true;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+    if (kept.length) out.push(new ActionRowBuilder().addComponents(...kept));
+  }
+  return out;
 }
 
 function buildVerseEmbed(verses, page = 0, cacheId = null) {
@@ -536,7 +561,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     ));
   }
 
-  return { embeds: [embed], components: rows };
+  return { embeds: [embed], components: dedupeRows(rows) };
 }
 
 // Chapter embed — already matches V3, keeping as-is
@@ -597,7 +622,7 @@ function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page =
     new ButtonBuilder().setCustomId(`toc|${book}||0`).setStyle(ButtonStyle.Secondary).setLabel("📖 Chapters"),
     new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
   ));
-  return { embeds: [embed], components: rows };
+  return { embeds: [embed], components: dedupeRows(rows) };
 }
 
 // Bible TOC embed — matches V3: OT/NT + Start Reading + Daily Verse
@@ -624,7 +649,7 @@ function buildBookTocEmbed(book, pageIdx = 0) {
     .setDescription(`Select a chapter to read:\n\n${totalPages > 1 ? `Chapters ${start + 1}–${end} of ${totalChapters}` : `${totalChapters} chapter${totalChapters !== 1 ? "s" : ""}`}`)
     .setColor(0xC8922E).setThumbnail(KJB_LOGO)
     .setFooter({ text: `KJB Reader • ${totalPages > 1 ? `Page ${pageIdx + 1} of ${totalPages} • ` : ""}kingjamesbiblereader.com` });
-  return { embeds: [embed], components: rows };
+  return { embeds: [embed], components: dedupeRows(rows) };
 }
 
 function buildBibleTocEmbed(page = 0) {
@@ -655,7 +680,7 @@ function buildBibleTocEmbed(page = 0) {
     new ButtonBuilder().setCustomId(`testament|NT|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 New Testament"),
     new ButtonBuilder().setCustomId(`dailyverse|`).setStyle(ButtonStyle.Primary).setLabel("💡 Daily Verse"),
   ));
-  return { embeds: [embed], components: rows };
+  return { embeds: [embed], components: dedupeRows(rows) };
 }
 
 // Testament browser — paginated book list for OT or NT
@@ -685,7 +710,7 @@ function buildTestamentEmbed(test, page = 0) {
     .setDescription(`Select a book to see its chapters.\n\nPage ${page + 1} of ${totalPages}`)
     .setColor(0xC8922E).setThumbnail(KJB_LOGO)
     .setFooter({ text: `KJB Reader • kingjamesbiblereader.com` });
-  return { embeds: [embed], components: rows };
+  return { embeds: [embed], components: dedupeRows(rows) };
 }
 
 // Daily verse embed — matches V3: Prev Vs / Next Vs + Read Chapter + TOC + Copy
@@ -714,7 +739,7 @@ function buildDailyVerseEmbed(v) {
     new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
     new ButtonBuilder().setCustomId(`copyref|${shortRef}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel("📋 Copy"),
   ));
-  return { embeds: [embed], components: rows };
+  return { embeds: [embed], components: dedupeRows(rows) };
 }
 
 // Search embed — matches V3: 5 per page, full verse text, keyword highlighting, per-result openverse buttons
@@ -756,7 +781,7 @@ function buildSearchEmbed(query, keywords, total, verses, page, sliceStart) {
       new ButtonBuilder().setCustomId(`srchpg|${query.slice(0, 80)}|${page + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next ▶").setDisabled(page >= totalPages - 1),
     ));
   }
-  return { embeds: [embed], components: rows };
+  return { embeds: [embed], components: dedupeRows(rows) };
 }
 
 // Gospel embed — paginated
@@ -795,7 +820,7 @@ function buildGospelEmbed(page = 0) {
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
   ));
-  return { embeds: [embed], components: rows };
+  return { embeds: [embed], components: dedupeRows(rows) };
 }
 
 // ============ CLIENT ============

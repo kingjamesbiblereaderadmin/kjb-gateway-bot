@@ -22,43 +22,9 @@ function loadServers() {
 }
 function saveServers(servers) {
   fs.writeFileSync(SERVERS_FILE, JSON.stringify(servers, null, 2));
-  scheduleGitBackup();
 }
-
-// ── Live backup of servers.json to git ─────────────────────────────────────
-// servers.json is the only persistent record of per-guild settings, and this app is deployed
-// via git-sync (a code push redeploys the container from the repo). Without this, a code deploy
-// would silently reset every guild's settings to whatever was last committed, and could even make
-// already-configured guilds look "new" again (re-triggering onboarding). To prevent that, every
-// write to servers.json is committed and pushed back to the SAME repo/branch on a short debounce,
-// so the repo is always a near-live mirror of the running state and a future deploy can never regress it.
-let _gitBackupTimer = null;
-function scheduleGitBackup() {
-  if (_gitBackupTimer) return;
-  _gitBackupTimer = setTimeout(() => {
-    _gitBackupTimer = null;
-    (async () => {
-      const token = process.env.GITHUB_PUSH_TOKEN;
-      if (!token) { console.warn("⚠️ GITHUB_PUSH_TOKEN not set — skipping servers.json git backup"); return; }
-      // The Discloud container has no git binary — use the GitHub Contents REST API instead.
-      const api = "https://api.github.com/repos/kingjamesbiblereaderadmin/kjb-gateway-bot/contents/servers.json";
-      const headers = { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "User-Agent": "kjb-gateway-bot" };
-      let sha;
-      try {
-        const r = await fetch(api, { headers });
-        if (r.ok) sha = (await r.json()).sha;
-      } catch {}
-      const content = fs.readFileSync(SERVERS_FILE).toString("base64");
-      const r2 = await fetch(api, {
-        method: "PUT",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "auto-backup servers.json", content, branch: "main", ...(sha ? { sha } : {}) }),
-      });
-      if (r2.ok) console.log("💾 servers.json backed up to git");
-      else console.error("⚠️ servers.json git backup failed:", (await r2.text()).slice(0, 300));
-    })().catch(e => console.error("⚠️ servers.json git backup failed:", (e.message || "").slice(0, 300)));
-  }, 15000); // debounce: coalesce rapid successive writes into one commit
-}
+// (Git backup of servers.json removed — the daily verse feature is gone and nothing writes
+// server settings anymore, so there is nothing to mirror back to the repo.)
 function getServer(guildId) {
   return loadServers().find(s => s.guild_id === guildId);
 }

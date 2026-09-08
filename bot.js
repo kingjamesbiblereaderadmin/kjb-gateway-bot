@@ -1,5 +1,4 @@
-import { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder, PermissionsBitField, ModalBuilder, TextInputBuilder, AttachmentBuilder } from "discord.js";
-import cron from "node-cron";
+import { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, AttachmentBuilder } from "discord.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -77,98 +76,10 @@ function updateServer(guildId, updates) {
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || "";
 
-async function patchWebhookAvatar(webhookUrl) {
-  try {
-    const imgRes = await fetch(KJB_LOGO);
-    if (!imgRes.ok) return;
-    const imgBuf = await imgRes.arrayBuffer();
-    const base64 = Buffer.from(imgBuf).toString("base64");
-    await fetch(webhookUrl, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "KJB Reader", avatar: `data:image/png;base64,${base64}` }),
-    });
-  } catch (e) { console.warn("patchWebhookAvatar skipped:", e.message); }
-}
+// (Webhook avatar patching removed — daily verse delivery discontinued, no webhooks remain.)
 
-async function deliverDailyVerse() {
-  const now = new Date();
-  const utcH = now.getUTCHours();
-  const todayStr = now.toISOString().slice(0, 10);
-  const servers = loadServers();
-  const activeServers = servers.filter(s => s.active && s.webhook_url);
-  
-  // Check if any server needs delivery this hour
-  const needDelivery = activeServers.some(s => {
-    const [targetH] = (s.verse_time || "12:00").split(":").map(Number);
-    return targetH === utcH && s.last_sent_date !== todayStr;
-  });
-  if (!needDelivery) { console.log(`Daily: no servers need delivery at ${utcH}:00 UTC`); return; }
-
-  // Fetch daily verse once
-  let v;
-  try {
-    const data = await callBibleApi({ action: "daily_verse", clientDate: `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}` });
-    v = data?.verse || data;
-  } catch (e) { console.error("Daily: failed to fetch verse:", e.message); return; }
-  if (!v?.text) { console.error("Daily: no verse text"); return; }
-
-  const fullRef = v.bookFullName ? `${v.bookFullName} — ${v.chapter}:${v.verse}` : `${v.book} ${v.chapter}:${v.verse}`;
-  const formattedDate = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
-  const verseText = formatKJV(v.text);
-  const verseSup = v.superscription ? formatKJV(v.superscription) : "";
-  const shortRef = `${v.book} ${v.chapter}:${v.verse}`;
-
-  // Build embed + components
-  const prevDis = (v.book === "Genesis" && v.chapter === 1 && v.verse === 1);
-  const components = [
-    { type: 1, components: [
-      { type: 2, style: 2, label: "◀ Prev Vs", custom_id: `prevvs|${v.book}||${v.chapter}||${v.verse}`, disabled: prevDis },
-      { type: 2, style: 2, label: "Next Vs ▶", custom_id: `nextvs|${v.book}||${v.chapter}||${v.verse}` },
-    ]},
-    { type: 1, components: [
-      { type: 2, style: 2, label: "📖 Read Chapter", custom_id: `dv|${v.book}||${v.chapter}||${v.verse}` },
-      { type: 2, style: 2, label: "📖 TOC", custom_id: `bibletoc|0` },
-      { type: 2, style: 2, label: "📋 Copy", custom_id: `copyref|${shortRef}`.slice(0, 100) },
-    ]},
-  ];
-
-  const embed = {
-    title: `📖 Daily Verse — ${formattedDate}`,
-    description: `${verseSup ? `*${verseSup}*\n\n` : ""}**${fullRef}**\n\n> "${verseText}"`,
-    color: 0xC8922E,
-    thumbnail: { url: KJB_LOGO },
-    footer: { text: "KJB Reader • kingjamesbiblereader.com" },
-  };
-
-  let delivered = 0, skipped = 0, errors = 0;
-  for (const server of activeServers) {
-    const [targetH] = (server.verse_time || "12:00").split(":").map(Number);
-    if (targetH !== utcH) { skipped++; continue; }
-    if (server.last_sent_date === todayStr) { skipped++; continue; }
-    try {
-      await patchWebhookAvatar(server.webhook_url);
-      const payload = {
-        embeds: [embed],
-        components,
-        allowed_mentions: server.role_id === "everyone" ? { parse: ["everyone"] } : server.role_id ? { roles: [server.role_id] } : { parse: [] },
-      };
-      if (server.role_id === "everyone") payload.content = "@everyone";
-      else if (server.role_id) payload.content = `<@&${server.role_id}>`;
-      const res = await fetch(server.webhook_url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (res.status === 404 || res.status === 410) {
-        // Webhook dead — mark inactive
-        updateServer(server.guild_id, { active: false });
-        errors++;
-        continue;
-      }
-      if (!res.ok) { errors++; continue; }
-      updateServer(server.guild_id, { last_sent_date: todayStr });
-      delivered++;
-    } catch (e) { console.error("Delivery error:", e.message); errors++; }
-  }
-  console.log(`Daily delivery: delivered=${delivered} skipped=${skipped} errors=${errors}`);
-}
+// Daily verse delivery — permanently removed (owner decision, Aug 2026).
+// No scheduled deliveries: servers are no longer pinged with a daily verse.
 
 const BIBLE_API = "https://kingjamesbiblereader.com/api/functions/bibleApi";
 const KJB_LOGO = "https://cdn.discordapp.com/avatars/1529303667348606996/0dd9efc7dc75c3bfe0eda43d99d6ed4e.png?size=256";
@@ -628,7 +539,7 @@ function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page =
   return { embeds: [embed], components: dedupeRows(rows) };
 }
 
-// Bible TOC embed — matches V3: OT/NT + Start Reading + Daily Verse
+// Bible TOC embed — matches V3: OT/NT + Start Reading
 function buildBookTocEmbed(book, pageIdx = 0) {
   const totalChapters = KJV_BOOKS[book] || 0;
   if (totalChapters === 0) return null;
@@ -677,11 +588,10 @@ function buildBibleTocEmbed(page = 0) {
     new ButtonBuilder().setCustomId(`nextch|Genesis||1`).setStyle(ButtonStyle.Primary).setLabel("📖 Start Reading (Gen 1)"),
     new ButtonBuilder().setCustomId(`nextch|Matthew||1`).setStyle(ButtonStyle.Primary).setLabel("📖 New Testament (Matt 1)"),
   ));
-  // Row 2: Testament browsers + Daily Verse
+  // Row 2: Testament browsers
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`testament|OT|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 Old Testament"),
     new ButtonBuilder().setCustomId(`testament|NT|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 New Testament"),
-    new ButtonBuilder().setCustomId(`dailyverse|`).setStyle(ButtonStyle.Primary).setLabel("💡 Daily Verse"),
   ));
   return { embeds: [embed], components: dedupeRows(rows) };
 }
@@ -716,34 +626,8 @@ function buildTestamentEmbed(test, page = 0) {
   return { embeds: [embed], components: dedupeRows(rows) };
 }
 
-// Daily verse embed — matches V3: Prev Vs / Next Vs + Read Chapter + TOC + Copy
-function buildDailyVerseEmbed(v) {
-  const now = new Date();
-  const fullTitle = v.bookFullName || KJV_FULL_TITLES[v.book] || v.book;
-  const ref = `${fullTitle} — ${v.chapter}:${v.verse}`;
-  let desc = `**${ref}**\n\n`;
-  if (v.verse === 1 && v.superscription) desc += `¶ ${formatKJV(v.superscription)}\n\n`;
-  desc += `> "${formatKJV(v.text)}"`;
-  const shortRef = `${v.book} ${v.chapter}:${v.verse}`;
-  const embed = new EmbedBuilder()
-    .setTitle(`📖 Daily Verse — ${now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}`)
-    .setDescription(desc)
-    .setColor(0xC8922E)
-    .setThumbnail(KJB_LOGO)
-    .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
+// Verse embed — Prev Vs / Next Vs + Read Chapter + TOC + Copy
 
-  const rows = [];
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`prevvs|${v.book}||${v.chapter}||${v.verse}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev Vs"),
-    new ButtonBuilder().setCustomId(`nextvs|${v.book}||${v.chapter}||${v.verse}`).setStyle(ButtonStyle.Secondary).setLabel("Next Vs ▶"),
-  ));
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`dv|${v.book}||${v.chapter}||${v.verse}`).setStyle(ButtonStyle.Secondary).setLabel("📖 Read Chapter"),
-    new ButtonBuilder().setCustomId(`bibletoc|0`).setStyle(ButtonStyle.Secondary).setLabel("📖 TOC"),
-    new ButtonBuilder().setCustomId(`copyref|${shortRef}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel("📋 Copy"),
-  ));
-  return { embeds: [embed], components: dedupeRows(rows) };
-}
 
 // Search embed — matches V3: 5 per page, full verse text, keyword highlighting, per-result openverse buttons
 function buildSearchEmbed(query, keywords, total, verses, page, sliceStart) {
@@ -859,27 +743,7 @@ client.on("ready", async () => {
 
 
 // ── Guild Onboarding (matches original discordGuildJoin behavior) ─────────────
-async function ensureDailyVerseChannel(guild) {
-  const channels = [...guild.channels.cache.values()];
-  // 1. Prefer existing #daily-verse / #bible-verse / #devotion channel
-  const existing = channels.find(c => /daily.?verse|bible.?verse|devotion|scripture/i.test(c.name) && c.isTextBased());
-  if (existing) return { channel: existing, isNew: false };
-  // 2. Try announcement channel (requires Community mode)
-  const firstCategory = channels.find(c => c.type === 4);
-  let channel;
-  try {
-    const createOpts = { name: "daily-verse", topic: "Daily King James Bible verse — powered by KJB Reader", type: 5 };
-    if (firstCategory) createOpts.parentId = firstCategory.id;
-    channel = await guild.channels.create(createOpts);
-    return { channel, isNew: true };
-  } catch (e) {
-    // 3. Fall back to regular text channel
-    const textOpts = { name: "daily-verse", topic: "Daily King James Bible verse — powered by KJB Reader", type: 0 };
-    if (firstCategory) textOpts.parentId = firstCategory.id;
-    channel = await guild.channels.create(textOpts);
-    return { channel, isNew: true };
-  }
-}
+// (Daily verse channel provisioning removed — feature discontinued.)
 
 async function ensureUpdatesChannel(guild) {
   const channels = [...guild.channels.cache.values()];
@@ -903,22 +767,12 @@ function buildWelcomeEmbed() {
     .setAuthor({ name: "KJB Reader", iconURL: KJB_LOGO })
     .setTitle("📖 Welcome to KJB Reader!")
     .setDescription([
-      "Daily Bible verses from the **King James Bible**, delivered to **#daily-verse** at **12:00 PM UTC** and pinging **@everyone**.",
-      "",
-      "**⚙️ Setup (admins)**",
-      "Type `setup` to configure:",
-      "• `setup channel` — Change the daily verse channel",
-      "• `setup time 8` — Set delivery hour (0-23, UTC). Default is 12 (12 PM UTC)",
-      "• `setup timezone` — Set your timezone (e.g. America/Chicago)",
-      "• `setup role` — Change the ping role (or @everyone)",
-      "• `setup enable` / `setup disable` — Pause or resume delivery",
-      "• `setup status` — View current configuration",
-      "• `fix` — Repair webhook (keeps your schedule)",
+      "Read the **King James Bible** right in Discord — look up any verse or chapter instantly.",
       "",
       "**📖 Commands — just type (no slash needed):**",
       "`John 3:16` — Verse lookup",
       "`Psalm 23` — Full chapter",
-      "`daily` — Today's verse",
+      "`1 Corinthians 15:1-4` — Verse range",
       "`random` — Random verse or chapter",
       "`search faith` — Search by keyword",
       "`toc` — Browse the Bible",
@@ -931,13 +785,11 @@ function buildWelcomeEmbed() {
       "◀ **Prev Ch** / **Next Ch ▶** — Navigate between chapters",
       "📋 **Copy** — Copy verse or chapter text",
       "",
-      "**📬 Channels**",
-      "**#daily-verse** — Daily Bible verse delivery",
-      "**#kjb-bot-updates** — Bot announcements & feature updates",
+      "**📬 #kjb-bot-updates** — Bot announcements & feature updates",
       "",
       "**Install KJB Reader:**",
       "📱 **[Add to your account](https://discord.com/oauth2/authorize?client_id=1529303667348606996&scope=applications.commands&integration_type=1)** — DMs, group DMs, any server",
-      "🏠 **[Add to a server](https://discord.com/oauth2/authorize?client_id=1529303667348606996&scope=bot+applications.commands&permissions=378494381072)** — Daily verse delivery",
+      "🏠 **[Add to a server](https://discord.com/oauth2/authorize?client_id=1529303667348606996&scope=bot+applications.commands&permissions=378494381072)**",
       "",
       "**Support**",
       "Join our Discord support server: **[kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)**",
@@ -950,78 +802,18 @@ function buildWelcomeEmbed() {
 
 async function onboardGuild(guild, { silent = false } = {}) {
   try {
-    // 1. Create #daily-verse channel (or use existing)
-    const { channel: dailyChannel, isNew } = await ensureDailyVerseChannel(guild);
-    // 2. Create #kjb-bot-updates channel for announcements
+    // Ensure #kjb-bot-updates exists (bot announcements)
     await ensureUpdatesChannel(guild);
-
-    if (!dailyChannel?.send) {
-      console.error("onboardGuild: no daily-verse channel available");
+    if (silent) {
+      console.log(`🔇 Silent resync for guild ${guild.id} — no welcome, no ping`);
       return;
     }
-
-    // 3. Create webhook in daily-verse channel with KJB logo
-    let webhookUrl = "";
-    try {
-      const webhook = await dailyChannel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
-      webhookUrl = webhook.url;
-    } catch (e) { console.error("onboardGuild webhook:", e.message); }
-
-    // 4. Save to servers.json with defaults — 12 PM UTC, @everyone ping
-    updateServer(guild.id, {
-      guild_id: guild.id,
-      guild_name: null,
-      webhook_url: webhookUrl,
-      channel_name: dailyChannel.name,
-      role_id: "everyone",
-      setup_by: "auto (bot join)",
-      active: true,
-      photo_enabled: false,
-      verse_time: "12:00",
-      timezone: "UTC",
-      updates_ready: true,
-    });
-
-    // 5. Post welcome message with @everyone ping to #daily-verse — ONLY for a genuine first-time install, never on a silent resync.
-    if (!silent) {
-      if (webhookUrl) {
-        try {
-          await fetch(webhookUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: "@everyone", embeds: [buildWelcomeEmbed()] }),
-          });
-        } catch (e) { console.error("onboardGuild welcome:", e.message); }
-      } else {
-        // Fallback: send via channel directly
-        await dailyChannel.send({ content: "@everyone", embeds: [buildWelcomeEmbed()] });
-      }
-    } else {
-      console.log(`🔇 Skipped welcome ping for guild ${guild.id} (silent resync, not a new install)`);
+    // Welcome message on a genuine first-time install only — no @everyone ping
+    const updatesChannel = [...guild.channels.cache.values()].find(c => /kjb.?bot.?update/i.test(c.name) && c.isTextBased());
+    if (updatesChannel?.send) {
+      await updatesChannel.send({ embeds: [buildWelcomeEmbed()] });
     }
-
-    // 6. Post a brief announcement in #kjb-bot-updates — also skipped on a silent resync.
-    if (!silent) try {
-      const updatesChannel = [...guild.channels.cache.values()].find(c => /kjb.?bot.?update/i.test(c.name) && c.isTextBased());
-      if (updatesChannel?.send) {
-        const announceEmbed = new EmbedBuilder()
-          .setAuthor({ name: "KJB Reader", iconURL: KJB_LOGO })
-          .setTitle("✅ KJB Reader is now active!")
-          .setDescription([
-            "Daily verses are delivered to **#daily-verse** at **12:00 PM UTC** (pinging @everyone).",
-            "",
-            "This channel is for bot announcements and feature updates.",
-            "",
-            "Type `help` anywhere to see all commands.",
-          ].join("\n"))
-          .setColor(0xC8922E)
-          .setThumbnail(KJB_LOGO)
-          .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
-        await updatesChannel.send({ embeds: [announceEmbed] });
-      }
-    } catch (e) { console.error("onboardGuild announce:", e.message); }
-
-    console.log(`✅ Onboarded guild ${guild.id}: #${dailyChannel.name} (new=${isNew})`);
+    console.log(`✅ Onboarded guild ${guild.id}`);
   } catch (e) { console.error("onboardGuild:", e.message); }
 }
 
@@ -1029,131 +821,7 @@ client.on("guildCreate", async (guild) => {
   try { await onboardGuild(guild); } catch (e) { console.error("guildCreate:", e?.message || e); }
 });
 
-// ── Build interactive setup embed ────────────────────────────────────────────
-const COMMON_TIMEZONES = [
-  { label: "UTC", value: "UTC" },
-  { label: "US Eastern (EST)", value: "America/New_York" },
-  { label: "US Central (CST)", value: "America/Chicago" },
-  { label: "US Mountain (MST)", value: "America/Denver" },
-  { label: "US Pacific (PST)", value: "America/Los_Angeles" },
-  { label: "Alaska (AKST)", value: "America/Anchorage" },
-  { label: "Hawaii (HST)", value: "Pacific/Honolulu" },
-  { label: "Brazil (BRT)", value: "America/Sao_Paulo" },
-  { label: "Argentina (ART)", value: "America/Argentina/Buenos_Aires" },
-  { label: "Mexico City (CST)", value: "America/Mexico_City" },
-  { label: "UK (GMT/BST)", value: "Europe/London" },
-  { label: "Central Europe (CET)", value: "Europe/Berlin" },
-  { label: "Eastern Europe (EET)", value: "Europe/Athens" },
-  { label: "Moscow (MSK)", value: "Europe/Moscow" },
-  { label: "Dubai (GST)", value: "Asia/Dubai" },
-  { label: "Pakistan (PKT)", value: "Asia/Karachi" },
-  { label: "India (IST)", value: "Asia/Kolkata" },
-  { label: "Bangladesh (BST)", value: "Asia/Dhaka" },
-  { label: "Thailand/Vietnam (ICT)", value: "Asia/Bangkok" },
-  { label: "Singapore/Philippines (SGT)", value: "Asia/Singapore" },
-  { label: "Hong Kong/China (HKT)", value: "Asia/Hong_Kong" },
-  { label: "Japan/Korea (JST)", value: "Asia/Tokyo" },
-  { label: "Australia East (AEST)", value: "Australia/Sydney" },
-  { label: "New Zealand (NZST)", value: "Pacific/Auckland" },
-];
-
-function buildSetupEmbed(guildId) {
-  const server = getServer(guildId) || {};
-  const channelName = server.channel_name || "Not set";
-  const webhookStatus = server.webhook_url ? "\u2705 Configured" : "\u274C Not set";
-  const [h] = (server.verse_time || "12:00").split(":").map(Number);
-  const tz = server.timezone || "UTC";
-  const roleLabel = !server.role_id || server.role_id === "everyone" ? "@everyone" : "<@&" + server.role_id + ">";
-  const activeStatus = server.active ? "\u2705 Active" : "\u274C Paused";
-
-  const embed = new EmbedBuilder()
-    .setAuthor({ name: "KJB Reader", iconURL: KJB_LOGO })
-    .setTitle("\u2699\uFE0F KJB Reader Setup")
-    .setDescription([
-      "Configure daily verse delivery below.",
-      "",
-      "**Channel:** #" + channelName,
-      "**Webhook:** " + webhookStatus,
-      "**Delivery Time:** " + h + ":00 UTC (" + tz + ")",
-      "**Ping Role:** " + roleLabel,
-      "**Status:** " + activeStatus,
-      "",
-      "Select a channel, role, timezone, or time below to update.",
-    ].join("\n"))
-    .setColor(0xC8922E)
-    .setThumbnail(KJB_LOGO)
-    .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
-
-  const channelRow = new ActionRowBuilder().addComponents(
-    new ChannelSelectMenuBuilder()
-      .setCustomId("setup_channel")
-      .setPlaceholder("Channel: #" + channelName)
-      .addChannelTypes(0, 5, 10, 11, 12)
-  );
-
-  const roleRow = new ActionRowBuilder().addComponents(
-    new RoleSelectMenuBuilder()
-      .setCustomId("setup_role")
-      .setPlaceholder("Select a ping role...")
-      .setMinValues(1)
-      .setMaxValues(1)
-  );
-  const tzRow = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("setup_tz")
-      .setPlaceholder("Timezone: " + tz)
-      .addOptions(COMMON_TIMEZONES.map(t => ({
-        label: t.label,
-        value: t.value,
-        default: t.value === tz,
-      })))
-      .addOptions({
-        label: "\u270f\uFE0F Custom timezone...",
-        value: "__custom__",
-        default: false,
-      })
-  );
-
-  // Time as dropdown — 24 options in one row instead of 24 buttons in 4 rows
-  const timeRow = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("setup_time")
-      .setPlaceholder("Delivery time: " + h + ":00 UTC")
-      .addOptions(Array.from({ length: 24 }, (_, hr) => ({
-        label: hr + ":00 UTC",
-        value: String(hr),
-        default: h === hr,
-      })))
-  );
-
-  // Everyone / Enable / Disable / Fix Webhook buttons — merged into one row to stay within Discord's 5-action-row limit
-  const toggleRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("setup_everyone")
-      .setLabel("Use @everyone")
-      .setStyle(server.role_id === "everyone" ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId("setup_enable")
-      .setLabel("Enable")
-      .setStyle(server.active ? ButtonStyle.Success : ButtonStyle.Secondary)
-      .setDisabled(server.active),
-    new ButtonBuilder()
-      .setCustomId("setup_disable")
-      .setLabel("Disable")
-      .setStyle(!server.active ? ButtonStyle.Danger : ButtonStyle.Secondary)
-      .setDisabled(!server.active),
-    new ButtonBuilder()
-      .setCustomId("setup_fix")
-      .setLabel("🔧 Fix Webhook")
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  return {
-    embeds: [embed],
-    components: [channelRow, roleRow, tzRow, timeRow, toggleRow],
-    allowedMentions: { parse: [] },
-  };
-}
+// (Setup panel removed — daily verse delivery discontinued.)
 
 // Extract searchable text from a message's content PLUS any embeds it carries —
 // covers link-unfurl embeds, webhook-posted embeds, and Discord "Forward" message snapshots,
@@ -1214,7 +882,6 @@ client.on("messageCreate", async (message) => {
         "",
         "**Or just type a command:**",
         "• `read John 3:16` — Same as typing the reference directly",
-        "• `daily` — Today's verse",
         "• `random` — Random verse",
         "• `random chapter` — Random chapter",
         "• `search faith` — Search by keyword",
@@ -1225,7 +892,6 @@ client.on("messageCreate", async (message) => {
         "",
         "**You can also @mention the bot** or use `kjb` prefix with any command.",
         "",
-        "**Server admin? Type `setup` to configure daily verse delivery.**",
         "",
         "**Support:**",
         "Join our Discord: **[kingjamesbiblereader.com/discord](https://kingjamesbiblereader.com/discord)**",
@@ -1237,19 +903,6 @@ client.on("messageCreate", async (message) => {
       .setThumbnail(KJB_LOGO)
       .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
     await message.reply({ embeds: [helpEmbed] });
-    return;
-  }
-
-  // Daily verse
-  if (isShort && /^daily\s*$/i.test(text)) {
-    try {
-      const now = new Date();
-      const data = await callBibleApi({ action: "daily_verse", clientDate: `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}` });
-      const v = data?.verse || data;
-      if (v?.text) {
-        await message.reply(buildDailyVerseEmbed(v));
-      }
-    } catch (e) { console.error("daily:", e.message); }
     return;
   }
 
@@ -1382,183 +1035,7 @@ client.on("messageCreate", async (message) => {
 
   // Setup command — interactive configuration with Discord components
   // ── Setup subcommands ──────────────────────────────────────────────────────
-  if (isShort && /^setup\s+/i.test(text) && message.guild) {
-    if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild)) {
-      await message.reply({ content: "❌ You need **Manage Server** permission to use setup.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-
-    const sub = text.replace(/^setup\s+/i, "").trim();
-    const server = getServer(message.guild.id) || {};
-
-    // setup channel — show interactive panel (channel select)
-    if (/^channel\s*$/i.test(sub)) {
-      await message.reply(buildSetupEmbed(message.guild.id));
-      return;
-    }
-
-    // setup time <hour> — set delivery hour directly
-    if (/^time\s+(\d{1,2})$/i.test(sub)) {
-      const hr = parseInt(sub.match(/^time\s+(\d{1,2})$/i)[1]);
-      if (isNaN(hr) || hr < 0 || hr > 23) {
-        await message.reply({ content: "❌ Time must be 0-23 (UTC). Example: `setup time 8`", allowedMentions: { repliedUser: false } });
-        return;
-      }
-      updateServer(message.guild.id, { verse_time: String(hr).padStart(2, "0") + ":00" });
-      await message.reply({ content: "✅ Delivery time set to **" + hr + ":00 UTC**.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-
-    // setup time — show interactive time buttons
-    if (/^time\s*$/i.test(sub)) {
-      await message.reply(buildSetupEmbed(message.guild.id));
-      return;
-    }
-
-    // setup timezone <tz> — set timezone directly
-    if (/^timezone\s+(.+)$/i.test(sub)) {
-      const tzInput = sub.match(/^timezone\s+(.+)$/i)[1].trim();
-      const TZ_ALIASES = {
-        "SGT": "Asia/Singapore", "JST": "Asia/Tokyo", "HKT": "Asia/Hong_Kong",
-        "IST": "Asia/Kolkata", "GST": "Asia/Dubai", "CET": "Europe/Berlin",
-        "GMT": "Europe/London", "BST": "Europe/London", "UTC": "UTC",
-        "EST": "America/New_York", "CST": "America/Chicago", "MST": "America/Denver",
-        "PST": "America/Los_Angeles", "BRT": "America/Sao_Paulo", "AEST": "Australia/Sydney",
-      };
-      const resolved = TZ_ALIASES[tzInput.toUpperCase()] || tzInput;
-      try {
-        Intl.DateTimeFormat("en-US", { timeZone: resolved });
-      } catch {
-        await message.reply({ content: "❌ Invalid timezone. Try `SGT`, `EST`, `PST`, or an IANA name like `America/Chicago`.", allowedMentions: { repliedUser: false } });
-        return;
-      }
-      updateServer(message.guild.id, { timezone: resolved });
-      const label = tzInput.toUpperCase() !== resolved ? tzInput.toUpperCase() + " → " + resolved : resolved;
-      await message.reply({ content: "✅ Timezone set to **" + label + "**.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-
-    // setup timezone — show interactive timezone select
-    if (/^timezone\s*$/i.test(sub)) {
-      await message.reply(buildSetupEmbed(message.guild.id));
-      return;
-    }
-
-    // setup role — show interactive role select
-    if (/^role\s*$/i.test(sub)) {
-      await message.reply(buildSetupEmbed(message.guild.id));
-      return;
-    }
-
-    // setup role @role — set role by mention
-    if (/^role\s+<@&(\d+)>$/i.test(sub)) {
-      const roleId = sub.match(/^role\s+<@&(\d+)>$/i)[1];
-      updateServer(message.guild.id, { role_id: roleId });
-      await message.reply({ content: "✅ Ping role set to <@&" + roleId + ">.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-
-    // setup role everyone
-    if (/^role\s+everyone$/i.test(sub)) {
-      updateServer(message.guild.id, { role_id: "everyone" });
-      await message.reply({ content: "✅ Ping role set to **@everyone**.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-
-    // setup enable
-    if (/^enable\s*$/i.test(sub)) {
-      if (!server.webhook_url) {
-        await message.reply({ content: "❌ No channel configured. Type `setup` first.", allowedMentions: { repliedUser: false } });
-        return;
-      }
-      updateServer(message.guild.id, { active: true });
-      await message.reply({ content: "✅ Daily verse delivery **enabled**.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-
-    // setup disable
-    if (/^disable\s*$/i.test(sub)) {
-      updateServer(message.guild.id, { active: false });
-      await message.reply({ content: "✅ Daily verse delivery **disabled**.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-
-    // setup status
-    if (/^status\s*$/i.test(sub)) {
-      await message.reply(buildSetupEmbed(message.guild.id));
-      return;
-    }
-
-    // Unknown subcommand
-    await message.reply({ content: "❌ Unknown setup command. Try: `setup`, `setup channel`, `setup time 8`, `setup timezone SGT`, `setup role`, `setup enable`, `setup disable`, `setup status`.", allowedMentions: { repliedUser: false } });
-    return;
-  }
-
-  // setup (no args) — show interactive panel
-  if (isShort && /^setup\s*$/i.test(text)) {
-    if (!message.guild) {
-      await message.reply({ content: "❌ Setup can only be used in a server.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-    if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild)) {
-      await message.reply({ content: "❌ You need **Manage Server** permission to use setup.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-    await message.reply(buildSetupEmbed(message.guild.id));
-    return;
-  }
-
-  // Enable daily delivery
-  if (isShort && /^enable\s*$/i.test(text) && message.guild) {
-    if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild)) return;
-    const server = getServer(message.guild.id);
-    if (!server?.webhook_url) {
-      await message.reply({ content: "❌ No channel configured. Type `setup` first.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-    updateServer(message.guild.id, { active: true });
-    await message.reply({ content: "✅ Daily verse delivery **enabled**.", allowedMentions: { repliedUser: false } });
-    return;
-  }
-
-  // Disable daily delivery
-  if (isShort && /^disable\s*$/i.test(text) && message.guild) {
-    if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild)) return;
-    updateServer(message.guild.id, { active: false });
-    await message.reply({ content: "✅ Daily verse delivery **disabled**.", allowedMentions: { repliedUser: false } });
-    return;
-  }
-
-  // Status — show current config
-  if (isShort && /^status\s*$/i.test(text) && message.guild) {
-    if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild)) return;
-    const server = getServer(message.guild.id);
-    if (!server) {
-      await message.reply({ content: "❌ No configuration found. Type `setup` to get started.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-    const tzLabel = server.timezone || "UTC";
-    const [h] = (server.verse_time || "12:00").split(":").map(Number);
-    const roleLabel = !server.role_id || server.role_id === "everyone" ? "@everyone" : `<@&${server.role_id}>`;
-    const embed = new EmbedBuilder()
-      .setTitle("📖 KJB Reader — Server Status")
-      .setDescription([
-        `**Channel:** ${server.channel_name || "Not set"}`,
-        `**Webhook:** ${server.webhook_url ? "✅ Configured" : "❌ Not set"}`,
-        `**Delivery Time:** ${h}:00 ${tzLabel}`,
-        `**Ping Role:** ${roleLabel}`,
-        `**Active:** ${server.active ? "✅ Yes" : "❌ No"}`,
-        `**Last Sent:** ${server.last_sent_date || "Never"}`,
-        "",
-        "Type `setup` to reconfigure, `enable`/`disable` to toggle.",
-      ].join("\n"))
-      .setColor(0xC8922E).setThumbnail(KJB_LOGO)
-      .setFooter({ text: "KJB Reader • kingjamesbiblereader.com" });
-    await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
-    return;
-  }
-
-  // Fix — repair webhook only (no daily verse delivery)
+  // Fix — verify the bot is healthy (updates channel + status)
   if (isShort && /^fix\s*$/i.test(text)) {
     if (!message.guild) {
       await message.reply({ content: "\u274C Fix can only be used in a server.", allowedMentions: { repliedUser: false } });
@@ -1568,53 +1045,14 @@ client.on("messageCreate", async (message) => {
       await message.reply({ content: "\u274C You need **Manage Server** permission to use fix.", allowedMentions: { repliedUser: false } });
       return;
     }
-    const server = getServer(message.guild.id);
-    if (!server) {
-      await message.reply({ content: "\u274C No configuration found. Type `setup` to get started.", allowedMentions: { repliedUser: false } });
-      return;
-    }
-
     const steps = [];
-
-    // 1. Repair webhook — test existing, recreate if dead
-    let webhookUrl = server.webhook_url;
-    let channelName = server.channel_name;
-    try {
-      if (webhookUrl) {
-        const testRes = await fetch(webhookUrl, { method: "GET" });
-        if (testRes.status === 404 || testRes.status === 410) {
-          webhookUrl = ""; // Dead, need to recreate
-          steps.push("\u26A0\uFE0F Existing webhook was dead");
-        } else {
-          // Webhook alive — patch avatar
-          await patchWebhookAvatar(webhookUrl);
-          steps.push("\u2705 Webhook OK (avatar patched)");
-        }
-      }
-
-      if (!webhookUrl) {
-        const { channel } = await ensureDailyVerseChannel(message.guild);
-        if (channel?.createWebhook) {
-          const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
-          webhookUrl = webhook.url;
-          channelName = channel.name;
-          updateServer(message.guild.id, { webhook_url: webhookUrl, channel_name: channelName, active: true });
-          steps.push("\u2705 New webhook created in #" + channelName);
-        }
-      }
-    } catch (e) {
-      console.error("fix webhook repair:", e.message);
-      steps.push("\u274C Webhook repair failed: " + e.message);
-    }
-
-    // 2. Ensure updates channel exists
     try {
       await ensureUpdatesChannel(message.guild);
       steps.push("\u2705 Updates channel OK");
     } catch (e) {
       steps.push("\u274C Updates channel check failed: " + e.message);
     }
-
+    steps.push("\u2705 KJB Reader is online and healthy");
     const fixResult = new EmbedBuilder()
       .setAuthor({ name: "KJB Reader", iconURL: KJB_LOGO })
       .setTitle("\u2699\uFE0F Fix Complete")
@@ -1625,6 +1063,7 @@ client.on("messageCreate", async (message) => {
     await message.reply({ embeds: [fixResult], allowedMentions: { repliedUser: false } });
     return;
   }
+
 
   // "read" prefix — treat as a verse/chapter reference (alias for just typing the reference)
   let refText = text;
@@ -1777,155 +1216,6 @@ client.on("messageCreate", async (message) => {
 
 client.on("interactionCreate", async (interaction) => {
   try {
-  // Handle select menus (setup)
-  if (interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
-    const id = interaction.customId;
-    
-    if (id === "setup_channel") {
-      const channel = interaction.channels.first();
-      if (!channel) return interaction.reply({ content: "❌ No channel selected.", flags: 64 });
-      try {
-        // Create webhook for the channel
-        const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
-        updateServer(interaction.guild.id, { channel_name: channel.name, webhook_url: webhook.url, updates_ready: true });
-        await interaction.update(buildSetupEmbed(interaction.guild.id));
-        await interaction.followUp({ content: `✅ Channel set to **#${channel.name}** with webhook.`, flags: 64 });
-      } catch (e) {
-        console.error("setup_channel:", e.message);
-        interaction.reply({ content: "❌ Could not create webhook. Ensure I have **Manage Webhooks** permission.", flags: 64 }).catch(() => {});
-      }
-      return;
-    }
-    
-    if (id === "setup_role") {
-      const role = interaction.roles.first();
-      const roleId = role ? role.id : "everyone";
-      updateServer(interaction.guild.id, { role_id: roleId });
-      await interaction.update(buildSetupEmbed(interaction.guild.id));
-      if (role) await interaction.followUp({ content: `✅ Ping role set to **@${role.name}**.`, flags: 64 });
-      else await interaction.followUp({ content: `✅ Ping role set to **@everyone**.`, flags: 64 });
-      return;
-    }
-    
-    if (id === "setup_tz") {
-      const tz = interaction.values[0];
-      if (tz === "__custom__") {
-        const modal = new ModalBuilder()
-          .setCustomId("setup_tz_custom")
-          .setTitle("Enter IANA Timezone");
-        const input = new TextInputBuilder()
-          .setCustomId("tz_value")
-          .setLabel("e.g. Asia/Tokyo, America/New_York, Europe/London")
-          .setStyle(1)
-          .setMinLength(2)
-          .setMaxLength(40)
-          .setPlaceholder("Enter a valid IANA timezone name")
-          .setRequired(true);
-        modal.addComponents(new ActionRowBuilder().addComponents(input));
-        await interaction.showModal(modal);
-        return;
-      }
-      updateServer(interaction.guild.id, { timezone: tz });
-      await interaction.update(buildSetupEmbed(interaction.guild.id));
-      await interaction.followUp({ content: "\u2705 Timezone set to **" + tz + "**.", flags: 64 });
-      return;
-    }
-
-    if (id === "setup_time") {
-      const hr = parseInt(interaction.values[0]);
-      if (isNaN(hr) || hr < 0 || hr > 23) return;
-      updateServer(interaction.guild.id, { verse_time: String(hr).padStart(2, "0") + ":00" });
-      await interaction.update(buildSetupEmbed(interaction.guild.id));
-      await interaction.followUp({ content: "\u2705 Delivery time set to **" + hr + ":00 UTC**.", flags: 64 });
-      return;
-    }
-    
-    return;
-  }
-
-  // Handle setup time buttons
-  // Handle custom timezone modal submit
-  if (interaction.isModalSubmit() && interaction.customId === "setup_tz_custom") {
-    let tzValue = interaction.fields.getTextInputValue("tz_value").trim();
-    const TZ_ALIASES = {
-      "SGT": "Asia/Singapore", "JST": "Asia/Tokyo", "KST": "Asia/Seoul",
-      "HKT": "Asia/Hong_Kong", "IST": "Asia/Kolkata", "GST": "Asia/Dubai",
-      "PKT": "Asia/Karachi", "BST": "Asia/Dhaka", "ICT": "Asia/Bangkok",
-      "PHT": "Asia/Manila", "CET": "Europe/Berlin", "EET": "Europe/Athens",
-      "MSK": "Europe/Moscow", "GMT": "Europe/London", "BST_UK": "Europe/London",
-      "UTC": "UTC", "EST": "America/New_York", "CST": "America/Chicago",
-      "MST": "America/Denver", "PST": "America/Los_Angeles",
-      "AKST": "America/Anchorage", "HST": "Pacific/Honolulu",
-      "BRT": "America/Sao_Paulo", "ART": "America/Argentina/Buenos_Aires",
-      "AEST": "Australia/Sydney", "NZST": "Pacific/Auckland",
-    };
-    const resolved = TZ_ALIASES[tzValue.toUpperCase()] || tzValue;
-    try {
-      Intl.DateTimeFormat("en-US", { timeZone: resolved });
-    } catch (e) {
-      await interaction.reply({ content: "\u274C **" + tzValue + "** is not a valid timezone.\nTry abbreviations like \`SGT\`, \`EST\`, \`PST\`, or an IANA name like \`Asia/Singapore\`, \`America/New_York\`.", flags: 64 });
-      return;
-    }
-    updateServer(interaction.guild.id, { timezone: resolved });
-    await interaction.reply({ content: "\u2705 Timezone set to **" + resolved + "**" + (resolved !== tzValue ? " (" + tzValue.toUpperCase() + ")" : "") + ".", flags: 64 });
-    return;
-  }
-
-  if (interaction.isButton() && interaction.customId === "setup_everyone") {
-    updateServer(interaction.guild.id, { role_id: "everyone" });
-    await interaction.update(buildSetupEmbed(interaction.guild.id));
-    await interaction.followUp({ content: "\u2705 Ping role set to **@everyone**.", flags: 64 });
-    return;
-  }
-
-  if (interaction.isButton() && interaction.customId === "setup_enable") {
-    updateServer(interaction.guild.id, { active: true });
-    await interaction.update(buildSetupEmbed(interaction.guild.id));
-    await interaction.followUp({ content: "\u2705 Daily verse delivery **enabled**.", flags: 64 });
-    return;
-  }
-
-  if (interaction.isButton() && interaction.customId === "setup_disable") {
-    updateServer(interaction.guild.id, { active: false });
-    await interaction.update(buildSetupEmbed(interaction.guild.id));
-    await interaction.followUp({ content: "\u2705 Daily verse delivery **disabled**.", flags: 64 });
-    return;
-  }
-
-  if (interaction.isButton() && interaction.customId === "setup_fix") {
-    await interaction.deferReply({ flags: 64 });
-    const server = getServer(interaction.guild.id) || {};
-    let webhookUrl = server.webhook_url;
-    let channelName = server.channel_name;
-    const steps = [];
-    try {
-      if (webhookUrl) {
-        const testRes = await fetch(webhookUrl, { method: "GET" });
-        if (testRes.status === 404 || testRes.status === 410) {
-          webhookUrl = "";
-          steps.push("\u26A0\uFE0F Existing webhook was dead");
-        } else {
-          await patchWebhookAvatar(webhookUrl);
-          steps.push("\u2705 Webhook OK (avatar patched)");
-        }
-      }
-      if (!webhookUrl) {
-        const { channel } = await ensureDailyVerseChannel(interaction.guild);
-        if (channel?.createWebhook) {
-          const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
-          webhookUrl = webhook.url;
-          channelName = channel.name;
-          updateServer(interaction.guild.id, { webhook_url: webhookUrl, channel_name: channelName, active: true });
-          steps.push("\u2705 New webhook created in #" + channelName);
-        }
-      }
-    } catch (e) {
-      steps.push("\u274C Webhook repair failed: " + e.message);
-    }
-    await interaction.editReply({ content: steps.join("\n"), flags: 64 });
-    return;
-  }
-
   // ============ SLASH COMMANDS ============
   if (interaction.isAutocomplete()) {
     try {
@@ -1985,15 +1275,6 @@ client.on("interactionCreate", async (interaction) => {
           if (data?.verse) await interaction.reply(buildVerseEmbed([data.verse]));
           else await interaction.reply({ content: "❌ Could not fetch a random verse.", flags: 64 });
         }
-        return;
-      }
-
-      if (commandName === "daily") {
-        const now = new Date();
-        const data = await callBibleApi({ action: "daily_verse", clientDate: `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}` });
-        const v = data?.verse || data;
-        if (v?.text) await interaction.reply(buildDailyVerseEmbed(v));
-        else await interaction.reply({ content: "❌ Could not fetch today's verse.", flags: 64 });
         return;
       }
 
@@ -2089,26 +1370,22 @@ client.on("interactionCreate", async (interaction) => {
           "**Slash commands:**",
           "• `/read [reference]` — Verse, range, or chapter (e.g. `John 3:16`, `Psalm 23`, `1 Corinthians 15:1-4`) or Table of Contents",
           "• `/random [type]` — Random verse or chapter",
-          "• `/daily` — Today's daily verse",
           "• `/search [keyword]` — Search verses by keyword",
           "• `/toc [book]` — Browse the Bible table of contents",
           "• `/gospel` — How to be saved",
         ];
-        if (inGuild) {
-          helpLines.push("• `/setup` — (Server admin) Configure daily verse delivery");
-        }
         helpLines.push("");
         if (inGuild) {
           helpLines.push(
             "**Or just type naturally** in any channel — no slash needed:",
-            "`John 3:16`, `Psalm 23`, `random`, `search faith`, `daily`, `toc`, `gospel`",
+            "`John 3:16`, `Psalm 23`, `random`, `search faith`, `toc`, `gospel`",
             "",
           );
         }
         helpLines.push(
           "**Install KJB Reader:**",
           "📱 **[Add to your account](https://discord.com/oauth2/authorize?client_id=1529303667348606996&scope=applications.commands&integration_type=1)** — DMs, group DMs, any server",
-          "🏠 **[Add to a server](https://discord.com/oauth2/authorize?client_id=1529303667348606996&scope=bot+applications.commands&permissions=378494381072)** — Daily verse delivery",
+          "🏠 **[Add to a server](https://discord.com/oauth2/authorize?client_id=1529303667348606996&scope=bot+applications.commands&permissions=378494381072)**",
         );
         helpLines.push(
           "",
@@ -2127,51 +1404,23 @@ client.on("interactionCreate", async (interaction) => {
         return;
       }
 
-      if (commandName === "setup") {
-        if (!interaction.guild) { await interaction.reply({ content: "❌ Setup can only be used in a server.", flags: 64 }); return; }
-        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageGuild)) {
-          await interaction.reply({ content: "❌ You need **Manage Server** permission to use setup.", flags: 64 });
-          return;
-        }
-        await interaction.reply({ ...buildSetupEmbed(interaction.guild.id), flags: 64 });
-        return;
-      }
+
 
       if (commandName === "fix") {
-        if (!interaction.guild) { await interaction.reply({ content: "❌ Fix can only be used in a server.", flags: 64 }); return; }
+        if (!interaction.guild) { await interaction.reply({ content: "\u274C Fix can only be used in a server.", flags: 64 }); return; }
         if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageGuild)) {
-          await interaction.reply({ content: "❌ You need **Manage Server** permission to use this.", flags: 64 });
+          await interaction.reply({ content: "\u274C You need **Manage Server** permission to use this.", flags: 64 });
           return;
         }
         await interaction.deferReply({ flags: 64 });
         const steps = [];
-        let server = getServer(interaction.guild.id) || {};
-        let webhookUrl = server.webhook_url;
         try {
-          if (webhookUrl) {
-            const testRes = await fetch(webhookUrl, { method: "GET" });
-            if (testRes.status === 404 || testRes.status === 410) {
-              webhookUrl = "";
-              steps.push("⚠️ Existing webhook was dead");
-            } else {
-              await patchWebhookAvatar(webhookUrl);
-              steps.push("✅ Webhook OK (avatar patched)");
-            }
-          }
-          if (!webhookUrl) {
-            const { channel } = await ensureDailyVerseChannel(interaction.guild);
-            if (channel?.createWebhook) {
-              const webhook = await channel.createWebhook({ name: "KJB Reader", avatar: KJB_LOGO });
-              webhookUrl = webhook.url;
-              updateServer(interaction.guild.id, { webhook_url: webhookUrl, channel_name: channel.name });
-              steps.push(`✅ Created webhook in #${channel.name}`);
-            } else {
-              steps.push("❌ Could not create webhook — check my **Manage Webhooks** permission.");
-            }
-          }
+          await ensureUpdatesChannel(interaction.guild);
+          steps.push("\u2705 Updates channel OK");
         } catch (e) {
-          steps.push("❌ Webhook repair failed: " + e.message);
+          steps.push("\u274C Updates channel check failed: " + e.message);
         }
+        steps.push("\u2705 KJB Reader is online and healthy");
         await interaction.editReply({ content: steps.join("\n") });
         return;
       }
@@ -2407,21 +1656,6 @@ client.on("interactionCreate", async (interaction) => {
     return;
   }
 
-  // Daily verse button
-  if (customId.startsWith("dailyverse|")) {
-    try {
-      const now = new Date();
-      const data = await callBibleApi({ action: "daily_verse", clientDate: `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}` });
-      const v = data?.verse || data;
-      if (v?.text) {
-        await interaction.reply(buildDailyVerseEmbed(v));
-      } else {
-        interaction.reply({ content: "❌ Could not fetch daily verse.", flags: 64 }).catch(() => {});
-      }
-    } catch (e) { console.error("dailyverse:", e.message); interaction.reply({ content: "❌ Error.", flags: 64 }).catch(() => {}); }
-    return;
-  }
-
   // Testament browser
   if (customId.startsWith("testament|")) {
     const parts = customId.split("|");
@@ -2522,11 +1756,7 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// Hourly cron: daily verse delivery check (runs at :00 each hour)
-cron.schedule("0 * * * *", () => {
-  console.log(`[${new Date().toISOString()}] Running hourly daily verse check...`);
-  deliverDailyVerse().catch(e => console.error("Daily delivery error:", e));
-});
+// (Daily verse hourly cron removed — feature permanently discontinued)
 
 // Log startup
 console.log(`KJB Reader gateway bot starting...`);

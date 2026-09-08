@@ -3,7 +3,7 @@
 // Public commands: contexts [0,1,2] (guild, DM, group DM) + integration_types [0,1] (guild install, user install)
 //   -> works in servers with the bot, in DMs with the bot, in group DMs, and in OTHER servers
 //      where the bot itself isn't installed but the user has personally added it (user install).
-// Admin commands (/setup, /fix): guild-only, since they configure a specific server's delivery.
+// Admin commands (/fix): guild-only, operates on a specific server.
 
 const APP_ID = process.env.DISCORD_APP_ID || "1529303667348606996";
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
@@ -43,7 +43,6 @@ const commands = [
     ],
     ...PUBLIC,
   },
-  { name: "daily", description: "Show today's daily verse", ...PUBLIC },
   {
     name: "search",
     description: "Search verses by keyword",
@@ -82,8 +81,7 @@ const commands = [
   },
   { name: "gospel", description: "How to be saved — the Gospel", ...PUBLIC },
   { name: "help", description: "Show all commands and how to use the bot", ...PUBLIC },
-  { name: "setup", description: "(Server admin) Configure daily verse delivery", ...ADMIN },
-  { name: "fix", description: "(Server admin) Repair webhook and reset delivery schedule", ...ADMIN },
+  { name: "fix", description: "(Server admin) Verify the bot is healthy", ...ADMIN },
 ];
 
 (async () => {

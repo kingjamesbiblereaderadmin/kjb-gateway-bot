@@ -403,7 +403,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
         ? `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
         : `${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
       const label = g.length === 1
-        ? `📖 ${gFullName} ${gFirst.chapter}:${gFirst.verse}`
+        ? `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}`
         : `📖 ${gFirst.book} ${gFirst.chapter}:${gFirst.verse}-${gLast.verse}`;
       return new ButtonBuilder().setCustomId(`srchverse|${ref}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label);
     });
@@ -620,9 +620,8 @@ function buildSearchEmbed(query, keywords, total, verses, page, sliceStart) {
   if (show.length > 0) {
     const resultBtns = show.map(v => {
       const shortRef = `${v.book} ${v.chapter}:${v.verse}`;
-      const fullRef = v.bookFullName || KJV_FULL_TITLES[v.book] || v.book;
-      const label = `${fullRef} ${v.chapter}:${v.verse}`;
-      return new ButtonBuilder().setCustomId(`srchverse|${shortRef}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(label.slice(0, 80));
+      // Buttons use SHORT book names (e.g. "Psalms 17:14") — same as the slash /search command
+      return new ButtonBuilder().setCustomId(`srchverse|${shortRef}`.slice(0, 100)).setStyle(ButtonStyle.Secondary).setLabel(shortRef.slice(0, 80));
     });
     rows.push(new ActionRowBuilder().addComponents(...resultBtns));
   }

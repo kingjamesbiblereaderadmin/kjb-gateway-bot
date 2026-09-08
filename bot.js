@@ -3,7 +3,6 @@ import cron from "node-cron";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { exec } from "child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,22 +38,26 @@ function scheduleGitBackup() {
   if (_gitBackupTimer) return;
   _gitBackupTimer = setTimeout(() => {
     _gitBackupTimer = null;
-    const token = process.env.GITHUB_PUSH_TOKEN;
-    if (!token) { console.warn("⚠️ GITHUB_PUSH_TOKEN not set — skipping servers.json git backup"); return; }
-    const remote = `https://kingjamesbiblereaderadmin:${token}@github.com/kingjamesbiblereaderadmin/kjb-gateway-bot.git`;
-    const cmd = [
-      `git add servers.json`,
-      `git -c user.email="bot@kjbreader.local" -c user.name="KJB Reader Bot" commit -m "auto-backup servers.json" --quiet`,
-      `git push "${remote}" HEAD:main --quiet`,
-    ].join(" && ");
-    exec(cmd, { cwd: __dirname }, (err, stdout, stderr) => {
-      if (err) {
-        if (/nothing to commit/i.test(stdout + stderr)) return; // no-op, fine
-        console.error("⚠️ servers.json git backup failed:", (stderr || err.message || "").slice(0, 300));
-      } else {
-        console.log("💾 servers.json backed up to git");
-      }
-    });
+    (async () => {
+      const token = process.env.GITHUB_PUSH_TOKEN;
+      if (!token) { console.warn("⚠️ GITHUB_PUSH_TOKEN not set — skipping servers.json git backup"); return; }
+      // The Discloud container has no git binary — use the GitHub Contents REST API instead.
+      const api = "https://api.github.com/repos/kingjamesbiblereaderadmin/kjb-gateway-bot/contents/servers.json";
+      const headers = { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "User-Agent": "kjb-gateway-bot" };
+      let sha;
+      try {
+        const r = await fetch(api, { headers });
+        if (r.ok) sha = (await r.json()).sha;
+      } catch {}
+      const content = fs.readFileSync(SERVERS_FILE).toString("base64");
+      const r2 = await fetch(api, {
+        method: "PUT",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "auto-backup servers.json", content, branch: "main", ...(sha ? { sha } : {}) }),
+      });
+      if (r2.ok) console.log("💾 servers.json backed up to git");
+      else console.error("⚠️ servers.json git backup failed:", (await r2.text()).slice(0, 300));
+    })().catch(e => console.error("⚠️ servers.json git backup failed:", (e.message || "").slice(0, 300)));
   }, 15000); // debounce: coalesce rapid successive writes into one commit
 }
 function getServer(guildId) {

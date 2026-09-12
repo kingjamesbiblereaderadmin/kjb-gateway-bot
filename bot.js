@@ -329,7 +329,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     // Dash range in same chapter (e.g., John 3:16-18) — show verses TOGETHER
     title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
     blocks = [];
-    if (first.verse === 1 && first.superscription) blocks.push(`¶ ${formatKJV(first.superscription)}`);
+    if (first.verse === 1 && first.superscription) blocks.push(centeredColophon(`¶ ${first.superscription}`));
     blocks.push(...verses.map(v => {
       const heading = v.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
       return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
@@ -338,7 +338,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     // Single verse
     title = `${fullTitle} — ${first.chapter}:${first.verse}`;
     blocks = [];
-    if (first.verse === 1 && first.superscription) blocks.push(`¶ ${formatKJV(first.superscription)}`);
+    if (first.verse === 1 && first.superscription) blocks.push(centeredColophon(`¶ ${first.superscription}`));
     const singleHeading = first.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${first.heading}**\n` : "";
     blocks.push(`${singleHeading}"${formatKJV(valid[0].text)}"`);
   } else if (sameBook && !sameChapter) {
@@ -467,7 +467,7 @@ function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page =
 
   let text = "";
   if (page === 0 && verses[0]?.verse === 1 && verses[0]?.superscription) {
-    text += `¶ ${formatKJV(verses[0].superscription)}\n\n`;
+    text += centeredColophon(`¶ ${verses[0].superscription}`) + "\n\n";
   }
   text += pageVerses.map(v => {
     const heading = v.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";

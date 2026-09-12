@@ -157,10 +157,14 @@ function centeredColophon(text) {
   return `\u200b${padding}${formatted}`;
 }
 
-// Psalm subscripts use the same fixed spacing as the already-correctly centered
-// Psalm 119 Hebrew headings; dynamic padding makes them drift right in Discord.
+// Psalm subscripts need width-calibrated spacing because their text is longer
+// than the short Psalm 119 Hebrew headings. Keep the zero-width anchor so
+// Discord preserves the leading em spaces.
 function centeredPsalmSubscript(text) {
-  return `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003${formatKJV(text)}`;
+  const formatted = formatKJV(text);
+  const plain = formatted.replace(/[\*_]/g, "");
+  const padding = "\u2003".repeat(Math.max(1, Math.floor((48 - plain.length) / 2)));
+  return `\u200b${padding}${formatted}`;
 }
 function stripMd(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "$1").replace(/\*/g, "").replace(/¶/g, "").trim(); }
 

@@ -147,6 +147,15 @@ function parseRef(text) {
 
 function fixAE(text) { return text.replace(/\bAEnon\b/g, "Ænon").replace(/\bAEneas\b/g, "Æneas"); }
 function formatKJV(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "*$1*"); }
+
+// Discord has no native text-align, so match the Psalm 119 heading treatment:
+// bold the special text and add em-space padding to visually center it.
+function centeredKjbSpecial(text) {
+  const formatted = formatKJV(text);
+  const plain = formatted.replace(/[\*_]/g, "");
+  const padding = "\u2003".repeat(Math.max(2, Math.min(12, Math.floor((48 - plain.length) / 2))));
+  return `${padding}**${formatted}**`;
+}
 function stripMd(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "$1").replace(/\*/g, "").replace(/¶/g, "").trim(); }
 
 function highlightKeywords(text, keywords) {
@@ -320,7 +329,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     // Dash range in same chapter (e.g., John 3:16-18) — show verses TOGETHER
     title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
     blocks = [];
-    if (first.verse === 1 && first.superscription) blocks.push(`¶ ${formatKJV(first.superscription)}`);
+    if (first.verse === 1 && first.superscription) blocks.push(centeredKjbSpecial(`¶ ${first.superscription}`));
     blocks.push(...verses.map(v => {
       const heading = v.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
       return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
@@ -329,7 +338,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     // Single verse
     title = `${fullTitle} — ${first.chapter}:${first.verse}`;
     blocks = [];
-    if (first.verse === 1 && first.superscription) blocks.push(`¶ ${formatKJV(first.superscription)}`);
+    if (first.verse === 1 && first.superscription) blocks.push(centeredKjbSpecial(`¶ ${first.superscription}`));
     const singleHeading = first.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${first.heading}**\n` : "";
     blocks.push(`${singleHeading}"${formatKJV(valid[0].text)}"`);
   } else if (sameBook && !sameChapter) {
@@ -360,7 +369,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
   // Chapter-ending subscriptions/colophons belong to the final verse lookup.
   // bibleApi attaches the colophon to the last returned verse (e.g. Hebrews 13:25);
   // include it in the same embed instead of silently dropping it.
-  if (last.colophon) blocks.push(`**¶ ${formatKJV(last.colophon)}**`);
+  if (last.colophon) blocks.push(centeredKjbSpecial(`¶ ${last.colophon}`));
 
   // Paginate — never truncate/drop content. Most lookups fit on one page (no pagination UI shown).
   const pages = paginateBlocks(blocks);
@@ -458,13 +467,13 @@ function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page =
 
   let text = "";
   if (page === 0 && verses[0]?.verse === 1 && verses[0]?.superscription) {
-    text += `¶ ${formatKJV(verses[0].superscription)}\n\n`;
+    text += centeredKjbSpecial(`¶ ${verses[0].superscription}`) + "\n\n";
   }
   text += pageVerses.map(v => {
     const heading = v.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
     return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
   }).join("\n\n");
-  if (page === totalPages - 1 && colophon) text += `\n\n¶ ${formatKJV(colophon)}`;
+  if (page === totalPages - 1 && colophon) text += "\n\n" + centeredKjbSpecial(`¶ ${colophon}`);
   if (text.length > 4000) text = text.slice(0, 3997) + "...";
 
   const embed = new EmbedBuilder()

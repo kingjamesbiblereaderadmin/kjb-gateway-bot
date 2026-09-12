@@ -357,6 +357,11 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     });
   }
 
+  // Chapter-ending subscriptions/colophons belong to the final verse lookup.
+  // bibleApi attaches the colophon to the last returned verse (e.g. Hebrews 13:25);
+  // include it in the same embed instead of silently dropping it.
+  if (last.colophon) blocks.push(`¶ ${formatKJV(last.colophon)}`);
+
   // Paginate — never truncate/drop content. Most lookups fit on one page (no pagination UI shown).
   const pages = paginateBlocks(blocks);
   const totalPages = pages.length;

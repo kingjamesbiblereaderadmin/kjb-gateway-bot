@@ -156,6 +156,12 @@ function centeredColophon(text) {
   const padding = "\u2003".repeat(Math.max(2, Math.min(12, Math.floor((48 - plain.length) / 2))));
   return `\u200b${padding}${formatted}`;
 }
+
+// Psalm subscripts use the same fixed spacing as the already-correctly centered
+// Psalm 119 Hebrew headings; dynamic padding makes them drift right in Discord.
+function centeredPsalmSubscript(text) {
+  return `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003${formatKJV(text)}`;
+}
 function stripMd(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "$1").replace(/\*/g, "").replace(/¶/g, "").trim(); }
 
 function highlightKeywords(text, keywords) {
@@ -329,7 +335,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     // Dash range in same chapter (e.g., John 3:16-18) — show verses TOGETHER
     title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
     blocks = [];
-    if (first.verse === 1 && first.superscription) blocks.push(centeredColophon(`¶ ${first.superscription}`));
+    if (first.verse === 1 && first.superscription) blocks.push(centeredPsalmSubscript(`¶ ${first.superscription}`));
     blocks.push(...verses.map(v => {
       const heading = v.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
       return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
@@ -338,7 +344,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     // Single verse
     title = `${fullTitle} — ${first.chapter}:${first.verse}`;
     blocks = [];
-    if (first.verse === 1 && first.superscription) blocks.push(centeredColophon(`¶ ${first.superscription}`));
+    if (first.verse === 1 && first.superscription) blocks.push(centeredPsalmSubscript(`¶ ${first.superscription}`));
     const singleHeading = first.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${first.heading}**\n` : "";
     blocks.push(`${singleHeading}"${formatKJV(valid[0].text)}"`);
   } else if (sameBook && !sameChapter) {
@@ -467,7 +473,7 @@ function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page =
 
   let text = "";
   if (page === 0 && verses[0]?.verse === 1 && verses[0]?.superscription) {
-    text += centeredColophon(`¶ ${verses[0].superscription}`) + "\n\n";
+    text += centeredPsalmSubscript(`¶ ${verses[0].superscription}`) + "\n\n";
   }
   text += pageVerses.map(v => {
     const heading = v.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";

@@ -154,7 +154,7 @@ function centeredColophon(text) {
   const formatted = formatKJV(text);
   const plain = formatted.replace(/[\*_]/g, "");
   const padding = "\u2003".repeat(Math.max(2, Math.min(12, Math.floor((48 - plain.length) / 2))));
-  return `${padding}${formatted}`;
+  return `\u200b${padding}${formatted}`;
 }
 function stripMd(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "$1").replace(/\*/g, "").replace(/¶/g, "").trim(); }
 

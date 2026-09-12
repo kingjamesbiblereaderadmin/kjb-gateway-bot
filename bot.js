@@ -1434,7 +1434,10 @@ client.on("interactionCreate", async (interaction) => {
         if (!verses.length) return interaction.reply({ content: "❌ Verse not found.", flags: 64 });
         const first = verses[0], last = verses[verses.length - 1];
         const refLabel = verses.length > 1 ? `${first.book} ${first.chapter}:${first.verse}-${last.verse}` : `${first.book} ${first.chapter}:${first.verse}`;
-        copyText = `${refLabel} (KJB) — ` + verses.map(v => stripMd(v.text)).join(" ");
+        const copiedVerse = verses.length === 1
+          ? `"${stripMd(verses[0].text)}"`
+          : `"${verses.map(v => `[${v.verse}] ${stripMd(v.text)}`).join(" ")}"`;
+        copyText = `${copiedVerse} — ${refLabel} (KJB)`;
       }
       const chunks = [];
       const lines = copyText.split("\n");

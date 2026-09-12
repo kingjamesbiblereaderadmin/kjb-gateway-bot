@@ -148,42 +148,16 @@ function parseRef(text) {
 function fixAE(text) { return text.replace(/\bAEnon\b/g, "Ænon").replace(/\bAEneas\b/g, "Æneas"); }
 function formatKJV(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "*$1*"); }
 
-// Discord has no native text-align. Colophons use em-space padding to appear
-// centered, while Psalm subscripts retain their normal left alignment.
 function centeredSpecialText(text) {
-  // Discord does not center wrapped description text: continuation lines lose
-  // the leading padding. Wrap first, then center every rendered line.
-  const raw = String(text || "");
-  const words = raw.trim().split(/\s+/);
-  const maxWidth = 44;
-  const lines = [];
-  let line = "";
-  for (const word of words) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (line && candidate.length > maxWidth) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = candidate;
-    }
-  }
-  if (line) lines.push(line);
-  return lines.map(part => {
-    const formatted = formatKJV(part);
-    const plain = formatted.replace(/[\*_]/g, "");
-    const padding = "\u2003".repeat(Math.max(1, Math.floor((48 - plain.length) / 2)));
-    return `\u200b${padding}${formatted}`;
-  }).join("\n");
+  // Bot subscripts and colophons are intentionally rendered as normal,
+  // left-aligned text so Discord handles wrapping naturally.
+  return formatKJV(text);
 }
 
-// Backward-compatible names used by verse/chapter renderers.
+// Shared normal-text renderer used by verse/chapter renderers.
 function centeredColophon(text) { return centeredSpecialText(text); }
 
-// Psalm subscripts use the same per-line centering so long titles do not
-// become left-aligned when Discord wraps them.
-function centeredPsalmSubscript(text) {
-  return centeredSpecialText(text);
-}
+function centeredPsalmSubscript(text) { return centeredSpecialText(text); }
 function stripMd(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "$1").replace(/\*/g, "").replace(/¶/g, "").trim(); }
 
 function highlightKeywords(text, keywords) {

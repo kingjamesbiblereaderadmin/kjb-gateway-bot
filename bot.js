@@ -162,9 +162,9 @@ function centeredColophon(text) {
 // Discord preserves the leading em spaces.
 function centeredPsalmSubscript(text) {
   const formatted = formatKJV(text);
-  const plain = formatted.replace(/[\*_]/g, "");
-  const padding = "\u2003".repeat(Math.max(1, Math.floor((48 - plain.length) / 2)));
-  return `\u200b${padding}${formatted}`;
+  // Calibrated against Discord embed description width: six em spaces
+  // centers the common Psalm subscript without pushing it toward the right edge.
+  return `\u200b\u2003\u2003\u2003\u2003\u2003\u2003${formatted}`;
 }
 function stripMd(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "$1").replace(/\*/g, "").replace(/¶/g, "").trim(); }
 

@@ -176,6 +176,19 @@ function highlightKeywords(text, keywords) {
 function getPrevCh(book, ch) { if (ch > 1) return { book, chapter: ch - 1 }; const idx = BOOK_ORDER.indexOf(book); if (idx <= 0) return null; const p = BOOK_ORDER[idx - 1]; return { book: p, chapter: KJV_BOOKS[p] }; }
 function getNextCh(book, ch) { if (ch < KJV_BOOKS[book]) return { book, chapter: ch + 1 }; const idx = BOOK_ORDER.indexOf(book); if (idx >= BOOK_ORDER.length - 1) return null; const n = BOOK_ORDER[idx + 1]; return { book: n, chapter: 1 }; }
 
+async function searchAllResults(query, wholeWord = false, testament = null, match = "all") {
+  const first = await callBibleApi({ action: "search", query, offset: 0, limit: 500, wholeWord, testament, match });
+  const total = first?.total || 0;
+  const verses = [...(first?.results || [])];
+  for (let offset = verses.length; offset < total; offset += 500) {
+    const page = await callBibleApi({ action: "search", query, offset, limit: 500, wholeWord, testament, match });
+    const batch = page?.results || [];
+    if (!batch.length) break;
+    verses.push(...batch);
+  }
+  return { total: verses.length, verses };
+}
+
 async function callBibleApi(payload, retried = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
@@ -616,7 +629,7 @@ function buildTestamentEmbed(test, page = 0) {
 
 
 // Search embed — matches V3: 5 per page, full verse text, keyword highlighting, per-result openverse buttons
-function buildSearchEmbed(query, keywords, total, verses, page, sliceStart) {
+function buildSearchEmbed(query, keywords, total, verses, page, sliceStart, searchOptions = {}) {
   const perPage = 5;
   const totalPages = Math.ceil(total / perPage);
   const start = (typeof sliceStart === "number") ? sliceStart : page * perPage;
@@ -648,9 +661,9 @@ function buildSearchEmbed(query, keywords, total, verses, page, sliceStart) {
   // Row 2: Pagination
   if (totalPages > 1) {
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`srchpg|${query.slice(0, 80)}|${page - 1}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev").setDisabled(page === 0),
+      new ButtonBuilder().setCustomId(`srchpg|${(searchOptions.rawQuery || query).slice(0, 70)}|${searchOptions.testament || ""}|${searchOptions.wholeWord ? "w" : "p"}|${page - 1}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev").setDisabled(page === 0),
       new ButtonBuilder().setCustomId(`nopg_srch_${page}`).setStyle(ButtonStyle.Secondary).setLabel(`${page + 1} / ${totalPages}`).setDisabled(true),
-      new ButtonBuilder().setCustomId(`srchpg|${query.slice(0, 80)}|${page + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next ▶").setDisabled(page >= totalPages - 1),
+      new ButtonBuilder().setCustomId(`srchpg|${(searchOptions.rawQuery || query).slice(0, 70)}|${searchOptions.testament || ""}|${searchOptions.wholeWord ? "w" : "p"}|${page + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next ▶").setDisabled(page >= totalPages - 1),
     ));
   }
   return { embeds: [embed], components: dedupeRows(rows) };
@@ -954,42 +967,7 @@ client.on("messageCreate", async (message) => {
         return verses.filter(v => testament === "OT" ? OT_SET.has(v.book) : !OT_SET.has(v.book));
       }
 
-      let results;
-      if (words.length === 1) {
-        const searchData = await callBibleApi({ action: "search", query: words[0], offset: 0, wholeWord });
-        let verses = searchData?.results || [];
-        verses = filterTestament(verses);
-        results = { total: verses.length, verses };
-      } else {
-        // Smart multi-word: fetch only the rarest word fully, then text-match the rest
-        const firstPages = await Promise.all(words.map(w =>
-          callBibleApi({ action: "search", query: w, offset: 0, wholeWord }).catch(() => null)
-        ));
-        if (firstPages.some(p => !p || !p.total)) {
-          results = { total: 0, verses: [] };
-        } else {
-        let minIdx = 0;
-        for (let i = 1; i < words.length; i++) {
-          if ((firstPages[i]?.total || 0) < (firstPages[minIdx]?.total || 0)) minIdx = i;
-        }
-        const baseResults = [...(firstPages[minIdx]?.results || [])];
-        const total = firstPages[minIdx]?.total || 0;
-        for (let off = 100; off < total && off < 5000; off += 100) {
-          const d = await callBibleApi({ action: "search", query: words[minIdx], offset: off, wholeWord });
-          const batch = d?.results || [];
-          if (!batch.length) break;
-          baseResults.push(...batch);
-        }
-        const otherWords = words.filter((_, i) => i !== minIdx);
-        const otherRegexes = otherWords.map(w => new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i"));
-        let intersected = baseResults.filter(v => {
-          const text = (v.text || "").toLowerCase();
-          return otherRegexes.every(re => re.test(text));
-        });
-        intersected = filterTestament(intersected);
-        results = { total: intersected.length, verses: intersected };
-        }
-      }
+      const results = await searchAllResults(query, wholeWord, testament, "all");
       if (!results.total) {
         let hint = "";
         if (testament) hint += ` in the ${testament === "OT" ? "Old" : "New"} Testament`;
@@ -998,7 +976,7 @@ client.on("messageCreate", async (message) => {
         return;
       }
       const searchTitle = `${query}${testament ? ` (${testament === "OT" ? "Old" : "New"} Testament)` : ""}${wholeWord ? " · whole word" : ""}`;
-      await message.reply(buildSearchEmbed(searchTitle, words, results.total, results.verses, 0));
+      await message.reply(buildSearchEmbed(searchTitle, words, results.total, results.verses, 0, undefined, { rawQuery: query, testament, wholeWord }));
     } catch (e) {
       console.error("search:", e.message);
       await message.reply({ content: "❌ Search failed. Try again!", allowedMentions: { repliedUser: false } });
@@ -1291,48 +1269,7 @@ client.on("interactionCreate", async (interaction) => {
           return verses.filter(v => testament === "OT" ? OT_SET.has(v.book) : !OT_SET.has(v.book));
         }
         
-        let results;
-        if (words.length === 1) {
-          const searchData = await callBibleApi({ action: "search", query: words[0], offset: 0, wholeWord });
-          let verses = searchData?.results || [];
-          verses = filterTestament(verses);
-          results = { total: verses.length, verses };
-        } else {
-          // Smart multi-word: fetch only the rarest word fully, then text-match the rest
-          // 1) Get total counts for each word via first page
-          const firstPages = await Promise.all(words.map(w =>
-            callBibleApi({ action: "search", query: w, offset: 0, wholeWord }).catch(() => null)
-          ));
-          // If any word has 0 results, no intersection possible
-          if (firstPages.some(p => !p || !p.total)) {
-            results = { total: 0, verses: [] };
-          } else {
-          // Find rarest word (fewest total results)
-          let minIdx = 0;
-          for (let i = 1; i < words.length; i++) {
-            if ((firstPages[i]?.total || 0) < (firstPages[minIdx]?.total || 0)) minIdx = i;
-          }
-          // 2) Fetch ALL results for the rarest word
-          const baseResults = [...(firstPages[minIdx]?.results || [])];
-          const total = firstPages[minIdx]?.total || 0;
-          for (let off = 100; off < total && off < 5000; off += 100) {
-            const d = await callBibleApi({ action: "search", query: words[minIdx], offset: off, wholeWord });
-            const batch = d?.results || [];
-            if (!batch.length) break;
-            baseResults.push(...batch);
-          }
-          // 3) Build list of other words to check in verse text (word-boundary match)
-          const otherWords = words.filter((_, i) => i !== minIdx);
-          const otherRegexes = otherWords.map(w => new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i"));
-          // 4) Filter base results: verse text must contain all other words
-          let intersected = baseResults.filter(v => {
-            const text = (v.text || "").toLowerCase();
-            return otherRegexes.every(re => re.test(text));
-          });
-          intersected = filterTestament(intersected);
-          results = { total: intersected.length, verses: intersected };
-          }
-        }
+        const results = await searchAllResults(query, wholeWord, testament, matchMode === "any" ? "any" : "all");
         console.log(`[search] results: total=${results.total} verses=${results.verses.length}`);
         if (!results.total) {
           let hint = "";
@@ -1342,7 +1279,7 @@ client.on("interactionCreate", async (interaction) => {
           return;
         }
         const searchTitle = `${query}${testament ? ` (${testament === "OT" ? "Old" : "New"} Testament)` : ""}${wholeWord ? " · whole word" : ""}`;
-        await interaction.editReply(buildSearchEmbed(searchTitle, words, results.total, results.verses, 0));
+        await interaction.editReply(buildSearchEmbed(searchTitle, words, results.total, results.verses, 0, undefined, { rawQuery: query, testament, wholeWord }));
         return;
       }
 
@@ -1687,49 +1624,18 @@ client.on("interactionCreate", async (interaction) => {
     if (page < 0) return;
     try {
       await interaction.deferUpdate();
-      const words = query.toLowerCase().split(/[,;\s]+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
-      let verses, total;
-      let sliceStart = page * 5;
-      if (words.length === 1) {
-        // Single word: fetch the 100-item chunk that contains this page, then let
-        // buildSearchEmbed slice the exact 5-item window (via sliceStart) — do NOT
-        // pre-slice here, or the page gets sliced twice and comes back empty.
-        const off = Math.floor((page * 5) / 100) * 100;
-        const searchData = await callBibleApi({ action: "search", query: words[0], offset: off });
-        verses = searchData?.results || [];
-        total = searchData?.total || 0;
-        sliceStart = (page * 5) - off;
-      } else {
-        // Smart multi-word: same approach as initial search
-        const firstPages = await Promise.all(words.map(w =>
-          callBibleApi({ action: "search", query: w, offset: 0 }).catch(() => null)
-        ));
-        if (firstPages.some(p => !p || !p.total)) {
-          return interaction.editReply({ content: "❌ No results.", embeds: [], components: [] });
-        }
-        let minIdx = 0;
-        for (let i = 1; i < words.length; i++) {
-          if ((firstPages[i]?.total || 0) < (firstPages[minIdx]?.total || 0)) minIdx = i;
-        }
-        const baseResults = [...(firstPages[minIdx]?.results || [])];
-        const totalCount = firstPages[minIdx]?.total || 0;
-        for (let off = 100; off < totalCount && off < 5000; off += 100) {
-          const d = await callBibleApi({ action: "search", query: words[minIdx], offset: off });
-          const batch = d?.results || [];
-          if (!batch.length) break;
-          baseResults.push(...batch);
-        }
-        const otherWords = words.filter((_, i) => i !== minIdx);
-        const otherRegexes = otherWords.map(w => new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i"));
-        verses = baseResults.filter(v => {
-          const text = (v.text || "").toLowerCase();
-          return otherRegexes.every(re => re.test(text));
-        });
-        total = verses.length;
-        sliceStart = page * 5;
-      }
+      const payloadParts = parts.slice(0, -1);
+      const hasOptions = payloadParts.length >= 3 && ["w", "p"].includes(payloadParts[payloadParts.length - 1]);
+      const testament = hasOptions ? (payloadParts[payloadParts.length - 3] || null) : null;
+      const wholeWord = hasOptions ? payloadParts[payloadParts.length - 2] === "w" : false;
+      const rawQuery = hasOptions ? payloadParts.slice(0, -3).join("|") : query;
+      const words = rawQuery.toLowerCase().split(/[,;\s]+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
+      const results = await searchAllResults(rawQuery, wholeWord, testament, "all");
+      const verses = results.verses;
+      const total = results.total;
+      const sliceStart = page * 5;
       if (!total) return interaction.editReply({ content: "❌ No results.", embeds: [], components: [] });
-      await interaction.editReply(buildSearchEmbed(query, words, total, verses, page, sliceStart));
+      await interaction.editReply(buildSearchEmbed(rawQuery, words, total, verses, page, sliceStart, { rawQuery, testament, wholeWord }));
     } catch (e) {
       console.error("srchpg:", e.message);
       // deferUpdate() was already called above, so the interaction is acknowledged —

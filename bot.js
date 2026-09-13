@@ -161,12 +161,16 @@ function centeredPsalmSubscript(text) { return centeredSpecialText(text); }
 function stripMd(text) { if (!text) return ""; return fixAE(text).replace(/\[([^\]]+)\]/g, "$1").replace(/\*/g, "").replace(/¶/g, "").trim(); }
 
 function highlightKeywords(text, keywords) {
-  let result = formatKJV(text);
-  for (const kw of keywords) {
-    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    result = result.replace(new RegExp(`(${escaped})`, "gi"), "**$1**");
-  }
-  return result;
+  // Highlight all terms in one regex. Repeated replacements create broken
+  // nested Markdown markers such as `Come** unto ... labour**`.
+  const terms = [...new Set((keywords || [])
+    .map(kw => String(kw || "").trim())
+    .filter(kw => kw.length >= 2))]
+    .sort((a, b) => b.length - a.length)
+    .map(kw => kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!terms.length) return formatKJV(text);
+  const highlighted = String(text || "").replace(new RegExp(`(${terms.join("|")})`, "gi"), "**$1**");
+  return formatKJV(highlighted);
 }
 
 function getPrevCh(book, ch) { if (ch > 1) return { book, chapter: ch - 1 }; const idx = BOOK_ORDER.indexOf(book); if (idx <= 0) return null; const p = BOOK_ORDER[idx - 1]; return { book: p, chapter: KJV_BOOKS[p] }; }

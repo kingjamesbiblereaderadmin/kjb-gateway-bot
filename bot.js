@@ -1624,11 +1624,12 @@ client.on("interactionCreate", async (interaction) => {
     if (page < 0) return;
     try {
       await interaction.deferUpdate();
-      const payloadParts = parts.slice(0, -1);
-      const hasOptions = payloadParts.length >= 3 && ["w", "p"].includes(payloadParts[payloadParts.length - 1]);
-      const testament = hasOptions ? (payloadParts[payloadParts.length - 3] || null) : null;
-      const wholeWord = hasOptions ? payloadParts[payloadParts.length - 2] === "w" : false;
-      const rawQuery = hasOptions ? payloadParts.slice(0, -3).join("|") : query;
+      const hasOptions = parts.length >= 4 && ["w", "p"].includes(parts[parts.length - 2]);
+      const testament = hasOptions ? (parts[parts.length - 3] || null) : null;
+      const wholeWord = hasOptions ? parts[parts.length - 2] === "w" : false;
+      // With options: srchpg|<query>|<testament>|<mode>|<page>
+      // Without options: srchpg|<query>|<page>
+      const rawQuery = hasOptions ? parts.slice(0, -3).join("|") : query;
       const words = rawQuery.toLowerCase().split(/[,;\s]+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, "")).filter(Boolean);
       const results = await searchAllResults(rawQuery, wholeWord, testament, "all");
       const verses = results.verses;

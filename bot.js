@@ -1623,7 +1623,6 @@ client.on("interactionCreate", async (interaction) => {
     const page = parseInt(parts[parts.length - 1]) || 0;
     if (page < 0) return;
     try {
-      await interaction.deferUpdate();
       const hasOptions = parts.length >= 4 && ["w", "p"].includes(parts[parts.length - 2]);
       const testament = hasOptions ? (parts[parts.length - 3] || null) : null;
       const wholeWord = hasOptions ? parts[parts.length - 2] === "w" : false;
@@ -1635,13 +1634,11 @@ client.on("interactionCreate", async (interaction) => {
       const verses = results.verses;
       const total = results.total;
       const sliceStart = page * 5;
-      if (!total) return interaction.editReply({ content: "❌ No results.", embeds: [], components: [] });
-      await interaction.editReply(buildSearchEmbed(rawQuery, words, total, verses, page, sliceStart, { rawQuery, testament, wholeWord }));
+      if (!total) return interaction.update({ content: "❌ No results.", embeds: [], components: [] });
+      await interaction.update(buildSearchEmbed(rawQuery, words, total, verses, page, sliceStart, { rawQuery, testament, wholeWord }));
     } catch (e) {
       console.error("srchpg:", e.message);
-      // deferUpdate() was already called above, so the interaction is acknowledged —
-      // must use editReply here, not reply(), or Discord shows "app didn't respond".
-      interaction.editReply({ content: "❌ Error loading that page.", embeds: [], components: [] }).catch(() => {});
+      interaction.update({ content: "❌ Error loading that page.", embeds: [], components: [] }).catch(() => {});
     }
     return;
   }

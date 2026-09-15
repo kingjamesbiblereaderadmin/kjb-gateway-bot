@@ -661,9 +661,9 @@ function buildSearchEmbed(query, keywords, total, verses, page, sliceStart, sear
   // Row 2: Pagination
   if (totalPages > 1) {
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`srchpg|${(searchOptions.rawQuery || query).slice(0, 70)}|${searchOptions.testament || ""}|${searchOptions.wholeWord ? "w" : "p"}|${page - 1}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev").setDisabled(page === 0),
+      new ButtonBuilder().setCustomId(`srchpg|${(searchOptions.rawQuery || query).slice(0, 85)}|${page - 1}`).setStyle(ButtonStyle.Secondary).setLabel("◀ Prev").setDisabled(page === 0),
       new ButtonBuilder().setCustomId(`nopg_srch_${page}`).setStyle(ButtonStyle.Secondary).setLabel(`${page + 1} / ${totalPages}`).setDisabled(true),
-      new ButtonBuilder().setCustomId(`srchpg|${(searchOptions.rawQuery || query).slice(0, 70)}|${searchOptions.testament || ""}|${searchOptions.wholeWord ? "w" : "p"}|${page + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next ▶").setDisabled(page >= totalPages - 1),
+      new ButtonBuilder().setCustomId(`srchpg|${(searchOptions.rawQuery || query).slice(0, 85)}|${page + 1}`).setStyle(ButtonStyle.Secondary).setLabel("Next ▶").setDisabled(page >= totalPages - 1),
     ));
   }
   return { embeds: [embed], components: dedupeRows(rows) };
@@ -1619,7 +1619,8 @@ client.on("interactionCreate", async (interaction) => {
   // Search page navigation
   if (customId.startsWith("srchpg|")) {
     const parts = customId.slice("srchpg|".length).split("|");
-    const query = parts.slice(0, -1).join("|");
+    const v4Style = parts.length >= 2 && /^\d+$/.test(parts[parts.length - 1]);
+    const query = v4Style ? parts.slice(0, -1).join("|") : parts.slice(0, -1).join("|");
     const page = parseInt(parts[parts.length - 1]) || 0;
     if (page < 0) return;
     try {

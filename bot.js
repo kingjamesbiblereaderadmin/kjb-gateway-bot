@@ -385,10 +385,16 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     });
   }
 
-  // Chapter-ending subscriptions/colophons belong to the final verse lookup.
-  // bibleApi attaches the colophon to the last returned verse (e.g. Hebrews 13:25);
-  // include it in the same embed instead of silently dropping it.
-  if (last.colophon) blocks.push(centeredColophon(`¶ ${last.colophon}`));
+  // A requested range may contain the chapter's final verse without that verse
+  // being the last array item after normalization. Scan every returned verse and
+  // include only colophons attached to an actual chapter-final verse.
+  for (const v of valid) {
+    if (!v.colophon) continue;
+    try {
+      const vc = await callBibleApi({ action: "getVerseCount", book: v.book, chapter: v.chapter });
+      if (v.verse === vc?.count) blocks.push(centeredColophon(`¶ ${v.colophon}`));
+    } catch (e) { console.error("colophon validation:", e.message); }
+  }
 
   // Paginate — never truncate/drop content. Most lookups fit on one page (no pagination UI shown).
   const pages = paginateBlocks(blocks);

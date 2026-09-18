@@ -386,14 +386,11 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
   }
 
   // A requested range may contain the chapter's final verse without that verse
-  // being the last array item after normalization. Scan every returned verse and
-  // include only colophons attached to an actual chapter-final verse.
+  // being the last array item after normalization. Scan every returned verse.
+  // bibleApi only attaches a colophon to the actual final verse, so this also
+  // preserves colophons when the range includes that verse.
   for (const v of valid) {
-    if (!v.colophon) continue;
-    try {
-      const vc = await callBibleApi({ action: "getVerseCount", book: v.book, chapter: v.chapter });
-      if (v.verse === vc?.count) blocks.push(centeredColophon(`¶ ${v.colophon}`));
-    } catch (e) { console.error("colophon validation:", e.message); }
+    if (v.colophon) blocks.push(centeredColophon(`¶ ${v.colophon}`));
   }
 
   // Paginate — never truncate/drop content. Most lookups fit on one page (no pagination UI shown).

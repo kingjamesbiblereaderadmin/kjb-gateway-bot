@@ -315,6 +315,17 @@ function dedupeRows(rows) {
   return out;
 }
 
+const EPILOGUE_FINAL_VERSES = new Map([
+  ["Romans:16", 27], ["1 Corinthians:16", 24], ["2 Corinthians:13", 13],
+  ["Galatians:6", 18], ["Ephesians:6", 24], ["Philippians:4", 23],
+  ["Colossians:4", 18], ["1 Thessalonians:5", 28], ["2 Thessalonians:3", 18],
+  ["1 Timothy:6", 21], ["2 Timothy:4", 22], ["Titus:3", 15],
+  ["Philemon:1", 25], ["Hebrews:13", 25]
+]);
+function isPsalmSubscript(v) { return v.book === "Psalms" && v.verse === 1 && !!v.superscription; }
+function isPsalm119HebrewHeading(v) { return v.book === "Psalms" && v.chapter === 119 && !!v.heading; }
+function isValidEpistleColophon(v) { return !!v.colophon && EPILOGUE_FINAL_VERSES.get(`${v.book}:${v.chapter}`) === v.verse; }
+
 function buildVerseEmbed(verses, page = 0, cacheId = null) {
   const valid = verses.filter(isValidVerse);
   if (!valid.length) return { embeds: [], components: [] };
@@ -348,23 +359,23 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
     // Dash range in same chapter (e.g., John 3:16-18) — show verses TOGETHER
     title = `${fullTitle} — ${first.chapter}:${first.verse}–${last.verse}`;
     blocks = [];
-    if (first.verse === 1 && first.superscription) blocks.push(centeredPsalmSubscript(`¶ ${first.superscription}`));
+    if (isPsalmSubscript(first)) blocks.push(centeredPsalmSubscript(`¶ ${first.superscription}`));
     blocks.push(...verses.map(v => {
-      const heading = v.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
+      const heading = isPsalm119HebrewHeading(v) ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
       return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
     }));
   } else if (valid.length === 1) {
     // Single verse
     title = `${fullTitle} — ${first.chapter}:${first.verse}`;
     blocks = [];
-    if (first.verse === 1 && first.superscription) blocks.push(centeredPsalmSubscript(`¶ ${first.superscription}`));
-    const singleHeading = first.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${first.heading}**\n` : "";
+    if (isPsalmSubscript(first)) blocks.push(centeredPsalmSubscript(`¶ ${first.superscription}`));
+    const singleHeading = isPsalm119HebrewHeading(first) ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${first.heading}**\n` : "";
     blocks.push(`${singleHeading}"${formatKJV(valid[0].text)}"`);
   } else if (sameBook && !sameChapter) {
     // Same book, different chapters
     title = fullTitle;
     blocks = verses.map(v => {
-      const heading = v.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
+      const heading = isPsalm119HebrewHeading(v) ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
       return `${heading}**${v.chapter}:${v.verse}**\n\n"${formatKJV(v.text)}"`;
     });
   } else {
@@ -377,7 +388,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
       } else {
         const ref = `${g[0].chapter}:${g[0].verse}–${g[g.length - 1].verse}`;
         const text = g.map(v => {
-          const heading = v.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
+          const heading = isPsalm119HebrewHeading(v) ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
           return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
         }).join("\n\n");
         return `**${gTitle} — ${ref}**\n\n${text}`;
@@ -390,7 +401,7 @@ function buildVerseEmbed(verses, page = 0, cacheId = null) {
   // bibleApi only attaches a colophon to the actual final verse, so this also
   // preserves colophons when the range includes that verse.
   for (const v of valid) {
-    if (v.colophon) blocks.push(centeredColophon(`¶ ${v.colophon}`));
+    if (isValidEpistleColophon(v)) blocks.push(centeredColophon(`¶ ${v.colophon}`));
   }
 
   // Paginate — never truncate/drop content. Most lookups fit on one page (no pagination UI shown).
@@ -488,14 +499,14 @@ function buildChapterEmbed(book, chapter, verses, colophon, bookFullName, page =
   const pageVerses = verses.slice(startIdx, startIdx + pageSize);
 
   let text = "";
-  if (page === 0 && verses[0]?.verse === 1 && verses[0]?.superscription) {
+  if (page === 0 && isPsalmSubscript(verses[0])) {
     text += centeredPsalmSubscript(`¶ ${verses[0].superscription}`) + "\n\n";
   }
   text += pageVerses.map(v => {
-    const heading = v.heading ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
+    const heading = isPsalm119HebrewHeading(v) ? `\u200b\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003**${v.heading}**\n` : "";
     return `${heading}[${v.verse}] ${formatKJV(v.text)}`;
   }).join("\n\n");
-  if (page === totalPages - 1 && colophon) text += "\n\n" + centeredColophon(`¶ ${colophon}`);
+  if (page === totalPages - 1 && colophon && EPILOGUE_FINAL_VERSES.get(`${book}:${chapter}`) === verses[verses.length - 1]?.verse) text += "\n\n" + centeredColophon(`¶ ${colophon}`);
   if (text.length > 4000) text = text.slice(0, 3997) + "...";
 
   const embed = new EmbedBuilder()

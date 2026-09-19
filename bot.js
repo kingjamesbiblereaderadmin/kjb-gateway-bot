@@ -186,6 +186,17 @@ async function searchAllResults(query, wholeWord = false, testament = null, matc
     if (!batch.length) break;
     verses.push(...batch);
   }
+  // Search responses intentionally stay lightweight, so hydrate each matched
+  // verse through resolve_refs to recover canonical subscripts, Psalm 119
+  // section names, and final-verse epistle colophons.
+  try {
+    const hydrated = await fetchVersesBatch(verses.map(v => v.ref).filter(Boolean));
+    const byRef = new Map(hydrated.map(v => [v.ref, v]));
+    for (let i = 0; i < verses.length; i++) {
+      const full = byRef.get(verses[i].ref);
+      if (full) verses[i] = { ...verses[i], ...full };
+    }
+  } catch (e) { console.error("search metadata hydration:", e.message); }
   return { total: verses.length, verses };
 }
 
@@ -650,7 +661,11 @@ function buildSearchEmbed(query, keywords, total, verses, page, sliceStart, sear
   const show = verses.slice(start, start + perPage);
   let desc = show.map(v => {
     const ref = v.ref || `${v.bookFullName || KJV_FULL_TITLES[v.book] || v.book} — ${v.chapter}:${v.verse}`;
-    return `**${ref}**\n\n${highlightKeywords(v.text, keywords)}`;
+    const metadata = [];
+    if (isPsalmSubscript(v)) metadata.push(centeredPsalmSubscript(`¶ ${v.superscription}`));
+    if (isPsalm119HebrewHeading(v)) metadata.push(centeredPsalmSubscript(`¶ ${v.heading}`));
+    if (isValidEpistleColophon(v)) metadata.push(centeredColophon(`¶ ${v.colophon}`));
+    return `**${ref}**\n\n${metadata.length ? metadata.join("\n\n") + "\n\n" : ""}${highlightKeywords(v.text, keywords)}`;
   }).join("\n\n");
   if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
 

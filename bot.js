@@ -661,11 +661,12 @@ function buildSearchEmbed(query, keywords, total, verses, page, sliceStart, sear
   const show = verses.slice(start, start + perPage);
   let desc = show.map(v => {
     const ref = v.ref || `${v.bookFullName || KJV_FULL_TITLES[v.book] || v.book} — ${v.chapter}:${v.verse}`;
-    const metadata = [];
-    if (isPsalmSubscript(v)) metadata.push(centeredPsalmSubscript(`¶ ${v.superscription}`));
-    if (isPsalm119HebrewHeading(v)) metadata.push(centeredPsalmSubscript(`¶ ${v.heading}`));
-    if (isValidEpistleColophon(v)) metadata.push(centeredColophon(`¶ ${v.colophon}`));
-    return `**${ref}**\n\n${metadata.length ? metadata.join("\n\n") + "\n\n" : ""}${highlightKeywords(v.text, keywords)}`;
+    const prefix = [];
+    if (isPsalmSubscript(v)) prefix.push(centeredPsalmSubscript(`¶ ${v.superscription}`));
+    if (isPsalm119HebrewHeading(v)) prefix.push(centeredPsalmSubscript(`¶ ${v.heading}`));
+    const verse = highlightKeywords(v.text, keywords);
+    const suffix = isValidEpistleColophon(v) ? `\n\n${centeredColophon(`¶ ${v.colophon}`)}` : "";
+    return `**${ref}**\n\n${prefix.length ? prefix.join("\n\n") + "\n\n" : ""}${verse}${suffix}`;
   }).join("\n\n");
   if (desc.length > 4000) desc = desc.slice(0, 3997) + "...";
 
